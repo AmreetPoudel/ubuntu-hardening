@@ -1,0 +1,7 @@
+---
+- name: Apply Linux hardening
+  hosts: all
+  become: true
+
+  roles:
+    - 01_pkg_remove_legacy

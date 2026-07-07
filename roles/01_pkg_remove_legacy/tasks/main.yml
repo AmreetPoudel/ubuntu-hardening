@@ -1,0 +1,6 @@
+---
+- name: Remove legacy packages
+  ansible.builtin.apt:
+    name: "{{ legacy_packages }}"
+    state: absent
+    purge: true
