@@ -5,18 +5,6 @@ Each hardening control is implemented as an **independent role (module)** —
 self-contained with its own tasks, variables, handlers, and documentation.
 A failure in one module never blocks the rest of the run.
 
----
-
-## Goals
-
-- **Modular** — one role per hardening control. Nothing is bundled.
-- **Resilient** — modules run inside `block/rescue`; if one fails, the run
-  continues and the failure is recorded, not swallowed.
-- **Transparent** — every module has a `README.md` describing exactly what
-  it does, which commands/tasks it runs, and how to roll it back.
-- **Idempotent** — safe to re-run against an already-hardened host.
-- **Auditable** — every run produces a timestamped report of what
-  passed, failed, or was skipped.
 
 ---
 
@@ -41,7 +29,6 @@ ubuntu24-hardening/
 ├── group_vars/
 │   └── all.yml              # Global variables — apply to every module
 ├── README.md                # This file
-├── reports/                 # Timestamped run reports (generated, gitignored)
 └── roles/
     ├── 01_pkg_remove_legacy/
     ├── 02_pkg_install_hardening_tools/
