@@ -111,7 +111,6 @@ and run the playbook with `--ask-vault-pass` or `--vault-password-file`.
 | # | Module | Category |
 |---|--------|----------|
 | 01 | pkg_remove_legacy | OS Baseline |
-| 02 | pkg_install_hardening_tools | OS Baseline |
 | 03 | unattended_upgrades | OS Baseline |
 | 04 | kernel_module_blacklist | OS Baseline |
 | 05 | kernel_unused_fs_disable | OS Baseline |
