@@ -4,4 +4,5 @@
   become: true
 
   roles:
-    - 01_pkg_remove_legacy
+    - pkg_remove_legacy
+    - pkg_unattended_upgrades
