@@ -1,0 +1,22 @@
+---
+- name: Install and configure unattended-upgrades
+  block:
+
+    - name: Install unattended-upgrades packages
+      ansible.builtin.apt:
+        name: "{{ unattended_upgrades_packages }}"
+        state: present
+
+    - name: Configure auto-upgrades
+      ansible.builtin.template:
+        src: auto-upgrades.j2
+        dest: /etc/apt/apt.conf.d/auto-upgrades
+        owner: root
+        group: root
+        mode: '0644'
+      notify: restart unattended-upgrades
+
+  rescue:
+    - name: Show failure message but keep going
+      ansible.builtin.debug:
+        msg: "WARNING: unattended_upgrades failed on {{ inventory_hostname }}, check manually. Rest of playbook will continue."
