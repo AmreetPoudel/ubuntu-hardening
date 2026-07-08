@@ -1,6 +1,0 @@
----
-legacy_packages:
-  - inetutils-telnet
-  - inetutils-telnetd
-  - tftpd-hpa
-  - xinetd
