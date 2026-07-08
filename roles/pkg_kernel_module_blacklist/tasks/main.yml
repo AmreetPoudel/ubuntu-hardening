@@ -1,0 +1,23 @@
+---
+- name: Blacklist unused kernel modules
+  block:
+
+    - name: Deploy modprobe blacklist config
+      ansible.builtin.template:
+        src: blacklist-hardening.conf.j2
+        dest: /etc/modprobe.d/blacklist-hardening.conf
+        owner: root
+        group: root
+        mode: '0644'
+
+    - name: Unload blacklisted modules if currently loaded
+      community.general.modprobe:
+        name: "{{ item }}"
+        state: absent
+      loop: "{{ kernel_blacklist_modules }}"
+      failed_when: false
+
+  rescue:
+    - name: Show failure message but keep going
+      ansible.builtin.debug:
+        msg: "WARNING: kernel_module_blacklist failed on {{ inventory_hostname }}, check manually. Rest of playbook will continue."

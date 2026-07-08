@@ -4,5 +4,14 @@
   become: true
 
   roles:
-    - pkg_remove_legacy
-    - pkg_unattended_upgrades
+    - role: pkg_remove_legacy
+      tags:
+        - pkg_remove_legacy
+
+    - role: pkg_unattended_upgrades
+      tags:
+        - pkg_unattended_upgrades
+
+    - role: pkg_kernel_module_blacklist
+      tags:
+        - pkg_kernel_module_blacklist

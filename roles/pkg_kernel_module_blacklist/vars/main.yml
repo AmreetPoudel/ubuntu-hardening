@@ -1,0 +1,6 @@
+---
+kernel_blacklist_modules:
+  - dccp
+  - sctp
+  - rds
+  - tipc
