@@ -102,29 +102,31 @@ This framework solves this using **Workload Profiles**:
 
 ## 📖 Detailed Usage & Command Reference
 
-### 1. Inventory Configuration & Vault Encryption
+### 1. Inventory Configuration & Vault Password Encryption
 
-Copy the example inventory template to create your working `inventory.ini`:
+To prevent lateral movement if the Ansible control node is ever compromised, **do not use passwordless SSH keys**. Instead, store target SSH usernames, SSH passwords, and sudo become passwords directly in `inventory.ini` and encrypt the entire file using **Ansible Vault**.
+
+Copy the example inventory template:
 ```bash
 cp inventory.example.ini inventory.ini
 ```
 
-Edit `inventory.ini` to assign target IP addresses into appropriate workload groups:
+Edit `inventory.ini` with target IP addresses, usernames, and passwords:
 ```ini
 [standalone]
-srv-app-01 ansible_host=10.0.0.10 ansible_user=admin
+srv-app-01 ansible_host=10.0.0.10 ansible_user=admin ansible_ssh_pass="MySecretPass123!" ansible_become_password="MySecretPass123!"
 
 [docker_nodes]
-srv-docker-01 ansible_host=10.0.0.20 ansible_user=admin
+srv-docker-01 ansible_host=10.0.0.20 ansible_user=admin ansible_ssh_pass="MySecretPass123!" ansible_become_password="MySecretPass123!"
 
 [k8s_nodes]
-k8s-node-01 ansible_host=10.0.0.30 ansible_user=admin
+k8s-node-01 ansible_host=10.0.0.30 ansible_user=admin ansible_ssh_pass="MySecretPass123!" ansible_become_password="MySecretPass123!"
 
 [db_nodes]
-srv-db-01 ansible_host=10.0.0.40 ansible_user=admin
+srv-db-01 ansible_host=10.0.0.40 ansible_user=admin ansible_ssh_pass="MySecretPass123!" ansible_become_password="MySecretPass123!"
 
 [web_nodes]
-srv-web-01 ansible_host=10.0.0.50 ansible_user=admin
+srv-web-01 ansible_host=10.0.0.50 ansible_user=admin ansible_ssh_pass="MySecretPass123!" ansible_become_password="MySecretPass123!"
 ```
 
 #### Encrypting Passwords with Ansible Vault
@@ -132,7 +134,7 @@ srv-web-01 ansible_host=10.0.0.50 ansible_user=admin
 # Encrypt inventory containing passwords
 ansible-vault encrypt inventory.ini
 
-# Edit encrypted inventory
+# Edit encrypted inventory file in the future
 ansible-vault edit inventory.ini
 
 # Run playbook with vault prompt
