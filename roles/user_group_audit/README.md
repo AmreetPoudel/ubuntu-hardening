@@ -1,3 +1,13 @@
 # Role: user_group_audit
 
-Verifies integrity of `/etc/passwd`, `/etc/shadow`, and `/etc/group` database files using `pwck` and `grpck`.
+## Description
+Audits user account database files for integrity and syntax errors.
+
+## System Commands & Modifications
+- `pwck -r`
+- `grpck -r`
+
+## Manual Rollback Steps
+```bash
+# Audit-only module. No state changes made.
+```

@@ -1,0 +1,11 @@
+{
+  "hostname": "{{ inventory_hostname }}",
+  "audit_timestamp": "{{ ansible_date_time.iso8601 }}",
+  "operating_system": "{{ ansible_distribution }} {{ ansible_distribution_version }}",
+  "kernel_version": "{{ ansible_kernel }}",
+  "total_checks": {{ audit_total_count }},
+  "passed_checks": {{ audit_pass_count }},
+  "failed_checks": {{ audit_fail_count }},
+  "compliance_score_percent": {{ (audit_pass_count | float / audit_total_count | float * 100) | round(2) }},
+  "results": {{ audit_results | to_nice_json }}
+}

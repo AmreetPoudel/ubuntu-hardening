@@ -1,3 +1,13 @@
 # Role: proc_hidepid
 
-Mounts `/proc` with `hidepid=2` (or respects `0` for container nodes) to prevent non-root users from viewing processes owned by other users.
+## Description
+Mounts /proc with hidepid=2 to restrict process visibility across users.
+
+## System Commands & Modifications
+- Updates `/etc/fstab` for `/proc` mount options
+- `mount -o remount /proc`
+
+## Manual Rollback Steps
+```bash
+sudo mount -o remount,hidepid=0 /proc
+```

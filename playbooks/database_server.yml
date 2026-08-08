@@ -1,0 +1,8 @@
+---
+- name: Database Server Security Hardening Playbook
+  hosts: db_nodes
+  become: true
+
+  roles:
+    - role: postgres_hardening
+      tags: [postgres, database]

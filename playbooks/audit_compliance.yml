@@ -1,0 +1,9 @@
+---
+- name: Standalone CIS Security Compliance Audit
+  hosts: standalone:docker_nodes:k8s_nodes:db_nodes:web_nodes
+  become: true
+  gather_facts: true
+
+  roles:
+    - role: compliance_audit_reporter
+      tags: [audit, compliance]

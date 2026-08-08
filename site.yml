@@ -1,191 +1,21 @@
 ---
-- name: Ubuntu 24.04 Production Hardening Playbook
-  hosts: hardening_targets
-  become: true
+# Master Hardening Framework Orchestrator Playbook
+# Sequentially imports base OS and technology-specific hardening playbooks
 
-  roles:
-    # -------------------------------------------------------------------------
-    # OS Baseline
-    # -------------------------------------------------------------------------
-    - role: pkg_remove_legacy
-      tags: [pkg_remove_legacy, os_baseline]
+- name: Apply Base OS System Hardening
+  import_playbook: playbooks/base_os.yml
 
-    - role: pkg_install_hardening_tools
-      tags: [pkg_install_hardening_tools, os_baseline]
+- name: Apply Docker Host Container Security
+  import_playbook: playbooks/docker_host.yml
 
-    - role: pkg_unattended_upgrades
-      tags: [pkg_unattended_upgrades, os_baseline]
+- name: Apply Kubernetes Node Security
+  import_playbook: playbooks/k8s_node.yml
 
-    - role: pkg_kernel_module_blacklist
-      tags: [pkg_kernel_module_blacklist, os_baseline]
+- name: Apply Database Server Security
+  import_playbook: playbooks/database_server.yml
 
-    - role: kernel_unused_fs_disable
-      tags: [kernel_unused_fs_disable, os_baseline]
+- name: Apply Web Server Security
+  import_playbook: playbooks/web_server.yml
 
-    - role: sysctl_hardening
-      tags: [sysctl_hardening, os_baseline, sysctl]
-
-    - role: ipv6_disable
-      tags: [ipv6_disable, os_baseline]
-
-    - role: proc_hidepid
-      tags: [proc_hidepid, os_baseline]
-
-    - role: tmp_devshm_hardening
-      tags: [tmp_devshm_hardening, os_baseline]
-
-    - role: sticky_bit_tmp
-      tags: [sticky_bit_tmp, os_baseline]
-
-    - role: coredump_disable
-      tags: [coredump_disable, os_baseline]
-
-    - role: shell_tmout
-      tags: [shell_tmout, os_baseline]
-
-    # -------------------------------------------------------------------------
-    # Authentication & Identity
-    # -------------------------------------------------------------------------
-    - role: user_group_audit
-      tags: [user_group_audit, auth]
-
-    - role: root_lockout
-      tags: [root_lockout, auth]
-
-    - role: pam_pwquality
-      tags: [pam_pwquality, auth, pam]
-
-    - role: pam_faillock
-      tags: [pam_faillock, auth, pam]
-
-    - role: password_aging
-      tags: [password_aging, auth]
-
-    - role: pam_pwhistory
-      tags: [pam_pwhistory, auth, pam]
-
-    - role: sudo_hardening
-      tags: [sudo_hardening, auth, sudo]
-
-    - role: ssh_hardening
-      tags: [ssh_hardening, auth, ssh]
-
-    - role: ssh_hostkey_hardening
-      tags: [ssh_hostkey_hardening, auth, ssh]
-
-    - role: login_banners
-      tags: [login_banners, auth]
-
-    # -------------------------------------------------------------------------
-    # Filesystem Integrity
-    # -------------------------------------------------------------------------
-    - role: sensitive_file_perms
-      tags: [sensitive_file_perms, filesystem]
-
-    - role: home_dir_perms
-      tags: [home_dir_perms, filesystem]
-
-    - role: umask_hardening
-      tags: [umask_hardening, filesystem]
-
-    - role: world_writable_scan
-      tags: [world_writable_scan, filesystem]
-
-    - role: suid_sgid_audit
-      tags: [suid_sgid_audit, filesystem]
-
-    - role: unowned_file_scan
-      tags: [unowned_file_scan, filesystem]
-
-    - role: chattr_immutable_configs
-      tags: [chattr_immutable_configs, filesystem]
-
-    - role: chattr_append_logs
-      tags: [chattr_append_logs, filesystem]
-
-    - role: aide_baseline
-      tags: [aide_baseline, filesystem, aide]
-
-    # -------------------------------------------------------------------------
-    # Network Security
-    # -------------------------------------------------------------------------
-    - role: network_exposure_audit
-      tags: [network_exposure_audit, network]
-
-    - role: ufw_default_policy
-      tags: [ufw_default_policy, network, ufw]
-
-    - role: ufw_ssh_restriction
-      tags: [ufw_ssh_restriction, network, ufw]
-
-    - role: ufw_allowed_services
-      tags: [ufw_allowed_services, network, ufw]
-
-    - role: ufw_rate_limit_ssh
-      tags: [ufw_rate_limit_ssh, network, ufw]
-
-    - role: ufw_logging
-      tags: [ufw_logging, network, ufw]
-
-    - role: fail2ban_ssh_jail
-      tags: [fail2ban_ssh_jail, network, fail2ban]
-
-    - role: fail2ban_sudo_jail
-      tags: [fail2ban_sudo_jail, network, fail2ban]
-
-    - role: tcp_wrappers
-      tags: [tcp_wrappers, network]
-
-    - role: auditd_rules
-      tags: [auditd_rules, network, auditd]
-
-    # -------------------------------------------------------------------------
-    # Additional Hardening Controls
-    # -------------------------------------------------------------------------
-    - role: cron_at_restriction
-      tags: [cron_at_restriction, additional]
-
-    - role: securetty
-      tags: [securetty, additional]
-
-    - role: log_file_perms
-      tags: [log_file_perms, additional]
-
-    - role: rsyslog_hardening
-      tags: [rsyslog_hardening, additional]
-
-    - role: journald_hardening
-      tags: [journald_hardening, additional]
-
-    - role: service_account_hardening
-      tags: [service_account_hardening, additional]
-
-    - role: debsums_verification
-      tags: [debsums_verification, additional]
-
-    - role: suid_strip_nonessential
-      tags: [suid_strip_nonessential, additional]
-
-    - role: systemd_service_hardening
-      tags: [systemd_service_hardening, additional]
-
-    - role: capability_audit
-      tags: [capability_audit, additional]
-
-    - role: hosts_equiv_removal
-      tags: [hosts_equiv_removal, additional]
-
-    - role: issue_content
-      tags: [issue_content, additional]
-
-    - role: dns_resolver_hardening
-      tags: [dns_resolver_hardening, additional]
-
-    - role: ntp_hardening
-      tags: [ntp_hardening, additional]
-
-    - role: compiler_restriction
-      tags: [compiler_restriction, additional]
-
-    - role: boot_perms
-      tags: [boot_perms, additional]
+- name: Generate Post-Hardening Compliance Audit Reports
+  import_playbook: playbooks/audit_compliance.yml

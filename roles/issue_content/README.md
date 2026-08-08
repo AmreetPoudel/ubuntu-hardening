@@ -1,3 +1,12 @@
 # Role: issue_content
 
-Removes OS architecture, kernel version, and host information macros from `/etc/issue` banners to prevent passive OS fingerprinting.
+## Description
+Removes OS version details from /etc/issue banners to prevent OS fingerprinting.
+
+## System Commands & Modifications
+- Removes OS macros from `/etc/issue` and `/etc/issue.net`
+
+## Manual Rollback Steps
+```bash
+sudo lsb_release -a > /etc/issue
+```

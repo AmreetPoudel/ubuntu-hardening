@@ -1,0 +1,32 @@
+---
+- name: Harden Docker daemon configuration
+  block:
+
+    - name: Check if Docker service exists
+      ansible.builtin.stat:
+        path: /etc/docker
+      register: docker_dir
+
+    - name: Deploy hardened /etc/docker/daemon.json
+      ansible.builtin.template:
+        src: daemon.json.j2
+        dest: /etc/docker/daemon.json
+        owner: root
+        group: root
+        mode: '0644'
+      when: docker_dir.stat.exists
+      notify: restart docker
+
+    - name: Ensure docker.sock permissions are secure
+      ansible.builtin.file:
+        path: /var/run/docker.sock
+        owner: root
+        group: docker
+        mode: '0660'
+      when: docker_dir.stat.exists
+      failed_when: false
+
+  rescue:
+    - name: Show failure message but keep going
+      ansible.builtin.debug:
+        msg: "WARNING: docker_daemon_hardening failed on {{ inventory_hostname }}, check manually."

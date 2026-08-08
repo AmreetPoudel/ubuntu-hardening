@@ -1,3 +1,12 @@
 # Role: ufw_logging
 
-Enables UFW security events logging (`logging: medium`).
+## Description
+Enables UFW security event logging.
+
+## System Commands & Modifications
+- `ufw logging medium`
+
+## Manual Rollback Steps
+```bash
+sudo ufw logging off
+```

@@ -1,3 +1,14 @@
 # Role: ntp_hardening
 
-Installs and enables `chrony` NTP service to ensure accurate network time synchronization across logs and security certificates.
+## Description
+Installs and enables Chrony time synchronization daemon.
+
+## System Commands & Modifications
+- `apt install chrony`
+- `systemctl enable --now chrony`
+
+## Manual Rollback Steps
+```bash
+sudo systemctl disable --now chrony
+sudo apt remove --purge chrony
+```

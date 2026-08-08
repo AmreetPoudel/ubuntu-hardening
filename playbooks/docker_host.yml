@@ -1,0 +1,8 @@
+---
+- name: Docker Host Security & Container Engine Hardening Playbook
+  hosts: docker_nodes
+  become: true
+
+  roles:
+    - role: docker_daemon_hardening
+      tags: [docker_daemon, docker]

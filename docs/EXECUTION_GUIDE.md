@@ -1,6 +1,6 @@
 # Linux Hardening Operations & Execution Guide
 
-This guide explains how to deploy, customize, and execute the Ansible Ubuntu 24.04 Hardening Framework across different production environments and workloads.
+This guide explains how to deploy, customize, and execute the Ansible Ubuntu 24.04 Hardening Framework across different production environments, server roles, and technology stacks.
 
 ---
 
@@ -35,7 +35,12 @@ srv-docker-01 ansible_host=10.0.0.20 ansible_user=admin
 
 [k8s_nodes]
 k8s-node-01 ansible_host=10.0.0.30 ansible_user=admin
-k8s-node-02 ansible_host=10.0.0.31 ansible_user=admin
+
+[db_nodes]
+srv-db-01 ansible_host=10.0.0.40 ansible_user=admin
+
+[web_nodes]
+srv-web-01 ansible_host=10.0.0.50 ansible_user=admin
 ```
 
 ### Encrypting Inventory with Ansible Vault
@@ -52,78 +57,93 @@ When running playbooks against encrypted inventories, supply `--ask-vault-pass` 
 
 ---
 
-## 3. Running the Playbook
+## 3. Running Non-Disruptive Security Audits
 
-### A. Full System Hardening
-Run all 57 hardening controls across all targets in `inventory.ini`:
+To audit system compliance score without modifying any system configuration:
+```bash
+ansible-playbook -i inventory.ini playbooks/audit_compliance.yml
+```
+This generates interactive **HTML** and **JSON** compliance reports in:
+`reports/audit-report-<hostname>-<timestamp>.html` and `.json`.
+
+---
+
+## 4. Running Specialized Workload Playbooks
+
+### A. Full Fleet Hardening & Audit Report
+Runs Base OS, all technology playbooks, and generates post-hardening audit reports:
 ```bash
 ansible-playbook -i inventory.ini site.yml --ask-vault-pass
 ```
 
-### B. Dry-Run / Audit Mode (Check Only)
-Preview what changes would be made without altering system state:
+### B. Base OS Hardening Only
+Applies baseline Ubuntu 24.04 OS security (SSH, PAM, sysctl, filesystem perms, auditd, UFW baseline):
 ```bash
-ansible-playbook -i inventory.ini site.yml --check --diff
+ansible-playbook -i inventory.ini playbooks/base_os.yml
 ```
 
-### C. Running Specific Workload Profiles
-Target only Docker nodes or Kubernetes nodes:
+### C. Docker Engine Hardening
+Hardens Docker daemon settings (`/etc/docker/daemon.json`, socket permissions, live-restore, journald logs):
 ```bash
-# Target Docker nodes only
-ansible-playbook -i inventory.ini site.yml -l docker_nodes
-
-# Target Kubernetes nodes only
-ansible-playbook -i inventory.ini site.yml -l k8s_nodes
+ansible-playbook -i inventory.ini playbooks/docker_host.yml
 ```
 
-### D. Running Specific Module Controls (By Tag)
+### D. Kubernetes Node Hardening
+Hardens Kubernetes Kubelet configuration, disables swap, and secures node configuration:
+```bash
+ansible-playbook -i inventory.ini playbooks/k8s_node.yml
+```
+
+### E. Database Server Hardening
+Hardens PostgreSQL database instances (SSL enforcement, SCRAM-SHA-256, listen interfaces, data dir perms):
+```bash
+ansible-playbook -i inventory.ini playbooks/database_server.yml
+```
+
+### F. Web Server Hardening
+Hardens Nginx web servers (`server_tokens off`, HSTS, X-Frame-Options, TLSv1.2/1.3):
+```bash
+ansible-playbook -i inventory.ini playbooks/web_server.yml
+```
+
+---
+
+## 5. Running Specific Module Controls (By Tag)
+
 Run only SSH hardening:
 ```bash
 ansible-playbook -i inventory.ini site.yml --tags ssh_hardening
 ```
 
-Run only Sysctl kernel tunables:
+Run Docker daemon security:
 ```bash
-ansible-playbook -i inventory.ini site.yml --tags sysctl_hardening
+ansible-playbook -i inventory.ini site.yml --tags docker_daemon
 ```
 
-Run UFW firewall rules:
+Run PostgreSQL security:
 ```bash
-ansible-playbook -i inventory.ini site.yml --tags ufw
+ansible-playbook -i inventory.ini site.yml --tags postgres
 ```
 
-### E. Running Category Modules
-Run all Authentication controls:
+Run Nginx security:
 ```bash
-ansible-playbook -i inventory.ini site.yml --tags auth
-```
-
-Run Network & Firewall controls:
-```bash
-ansible-playbook -i inventory.ini site.yml --tags network
-```
-
-Run Filesystem controls:
-```bash
-ansible-playbook -i inventory.ini site.yml --tags filesystem
+ansible-playbook -i inventory.ini site.yml --tags nginx
 ```
 
 ---
 
-## 4. Scaffolding New Hardening Roles
+## 6. Dry-Run / Audit Mode (Check Only)
+
+Preview what changes would be made without altering system state:
+```bash
+ansible-playbook -i inventory.ini site.yml --check --diff
+```
+
+---
+
+## 7. Scaffolding New Hardening Roles
 
 To create a new custom hardening role using the project template:
 ```bash
-./scripts/new_module.sh 58_custom_security_rule
+./scripts/new_module.sh 58_redis_hardening
 ```
-This generates the role directory with `tasks/main.yml`, `vars/main.yml`, `handlers/main.yml`, `templates/`, and `README.md`.
-
----
-
-## 5. Reviewing Reports & Audits
-
-Execution logs and task status summaries are written to:
-```
-/var/log/ansible-hardening/run-summary.log
-```
-Check this log after every run to inspect any modules flagged as `FAILED` or `SKIPPED`.

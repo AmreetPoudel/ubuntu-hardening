@@ -1,0 +1,8 @@
+---
+- name: Kubernetes Node & Kubelet Security Hardening Playbook
+  hosts: k8s_nodes
+  become: true
+
+  roles:
+    - role: k8s_node_hardening
+      tags: [k8s_node, k8s, kubelet]

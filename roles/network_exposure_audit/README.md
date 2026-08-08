@@ -1,3 +1,12 @@
 # Role: network_exposure_audit
 
-Audits and reports open listening sockets (`ss -tulpn`) across TCP and UDP interfaces.
+## Description
+Audits and displays open listening TCP and UDP sockets.
+
+## System Commands & Modifications
+- `ss -tulpn`
+
+## Manual Rollback Steps
+```bash
+# Audit-only module. No state changes made.
+```

@@ -1,3 +1,12 @@
 # Role: service_account_hardening
 
-Sets `/usr/sbin/nologin` shell for non-root system accounts (UID < 1000) to prevent interactive system logins.
+## Description
+Sets /usr/sbin/nologin shell for non-root system daemon accounts (UID < 1000).
+
+## System Commands & Modifications
+- `usermod -s /usr/sbin/nologin <daemon-user>`
+
+## Manual Rollback Steps
+```bash
+sudo usermod -s /bin/bash <user>
+```

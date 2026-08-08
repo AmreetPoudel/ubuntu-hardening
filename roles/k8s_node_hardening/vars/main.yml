@@ -1,0 +1,3 @@
+---
+k8s_disable_swap: true
+k8s_kubelet_config_path: "/var/lib/kubelet/config.yaml"

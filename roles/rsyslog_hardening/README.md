@@ -1,3 +1,14 @@
 # Role: rsyslog_hardening
 
-Configures rsyslog to create log files with secure `0640` file creation modes.
+## Description
+Configures rsyslog file creation mode to 0640.
+
+## System Commands & Modifications
+- Writes `/etc/rsyslog.d/99-hardening.conf`
+- `systemctl restart rsyslog`
+
+## Manual Rollback Steps
+```bash
+sudo rm -f /etc/rsyslog.d/99-hardening.conf
+sudo systemctl restart rsyslog
+```

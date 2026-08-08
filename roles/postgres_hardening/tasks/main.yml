@@ -1,0 +1,38 @@
+---
+- name: Apply PostgreSQL database server hardening
+  block:
+
+    - name: Check if PostgreSQL directory exists
+      ansible.builtin.stat:
+        path: /etc/postgresql
+      register: postgres_dir
+
+    - name: Ensure PostgreSQL data directory permissions are 0700
+      ansible.builtin.file:
+        path: /var/lib/postgresql
+        mode: '0700'
+        owner: postgres
+        group: postgres
+        state: directory
+      when: postgres_dir.stat.exists
+      failed_when: false
+
+    - name: Deploy PostgreSQL hardening configuration drop-in
+      ansible.builtin.copy:
+        dest: /etc/postgresql/99-hardening.conf
+        content: |
+          ssl = {{ postgres_ssl }}
+          password_encryption = {{ postgres_password_encryption }}
+          log_connections = {{ postgres_log_connections }}
+          log_disconnections = {{ postgres_log_disconnections }}
+          listen_addresses = '{{ postgres_listen_addresses }}'
+        owner: postgres
+        group: postgres
+        mode: '0640'
+      when: postgres_dir.stat.exists
+      notify: reload postgresql
+
+  rescue:
+    - name: Show failure message but keep going
+      ansible.builtin.debug:
+        msg: "WARNING: postgres_hardening failed on {{ inventory_hostname }}, check manually."

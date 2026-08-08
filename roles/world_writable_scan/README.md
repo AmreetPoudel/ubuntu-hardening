@@ -1,3 +1,12 @@
 # Role: world_writable_scan
 
-Finds files with world-writable permission bit set (`o+w`) and strips the write bit to eliminate unauthorized file modification risks.
+## Description
+Finds world-writable files (perm -0002) and strips write bit for others.
+
+## System Commands & Modifications
+- `find / -xdev -type f -perm -0002 -exec chmod o-w {} +`
+
+## Manual Rollback Steps
+```bash
+# Dependent on individual file requirements.
+```

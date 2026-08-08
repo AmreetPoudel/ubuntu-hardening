@@ -1,3 +1,12 @@
 # Role: pam_pwquality
 
-Enforces minimum length (14 chars) and complexity classes (4 types: upper, lower, digits, symbols) via `/etc/security/pwquality.conf`.
+## Description
+Enforces password complexity rules (min length 14, 4 character classes).
+
+## System Commands & Modifications
+- Writes `/etc/security/pwquality.conf`
+
+## Manual Rollback Steps
+```bash
+sudo rm -f /etc/security/pwquality.conf
+```

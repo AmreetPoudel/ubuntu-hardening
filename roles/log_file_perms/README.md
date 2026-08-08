@@ -1,3 +1,12 @@
 # Role: log_file_perms
 
-Strips group/world permissions on `/var/log` files to prevent unprivileged users from reading system activity logs.
+## Description
+Enforces strict permissions (0640/0600) on /var/log files.
+
+## System Commands & Modifications
+- `chmod g-wx,o-rwx /var/log/*`
+
+## Manual Rollback Steps
+```bash
+sudo chmod 0644 /var/log/syslog
+```

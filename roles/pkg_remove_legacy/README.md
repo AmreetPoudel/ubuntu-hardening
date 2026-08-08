@@ -1,9 +1,12 @@
 # Role: pkg_remove_legacy
 
 ## Description
-Purges insecure, legacy networking packages (`inetutils-telnet`, `inetutils-telnetd`, `tftpd-hpa`, `xinetd`, `rsh-client`, `rsh-redone-client`, `talk`).
+Purges legacy, unencrypted, and insecure network packages (telnet, rsh, xinetd, tftp).
 
-## Rollback
+## System Commands & Modifications
+- `apt purge inetutils-telnet inetutils-telnetd tftpd-hpa xinetd rsh-client talk`
+
+## Manual Rollback Steps
 ```bash
-sudo apt install <package-name>
+sudo apt install -y inetutils-telnet inetutils-telnetd tftpd-hpa xinetd
 ```

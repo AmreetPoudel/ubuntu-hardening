@@ -1,0 +1,130 @@
+---
+- name: Execute System Compliance Audit
+  block:
+
+    - name: Ensure reports output directory exists on control node
+      ansible.builtin.file:
+        path: "{{ audit_report_dir }}"
+        state: directory
+        mode: '0755'
+      delegate_to: localhost
+      run_once: true
+
+    - name: Check SSH Root Login status
+      ansible.builtin.shell: grep -iE "^PermitRootLogin\s+no" /etc/ssh/sshd_config /etc/ssh/sshd_config.d/*.conf
+      register: check_ssh_root
+      changed_when: false
+      failed_when: false
+
+    - name: Check SSH Password Authentication status
+      ansible.builtin.shell: grep -iE "^PasswordAuthentication\s+no" /etc/ssh/sshd_config /etc/ssh/sshd_config.d/*.conf
+      register: check_ssh_pass
+      changed_when: false
+      failed_when: false
+
+    - name: Check ASLR sysctl setting
+      ansible.builtin.command: sysctl -n kernel.randomize_va_space
+      register: check_aslr
+      changed_when: false
+      failed_when: false
+
+    - name: Check SUID coredump status
+      ansible.builtin.command: sysctl -n fs.suid_dumpable
+      register: check_coredump
+      changed_when: false
+      failed_when: false
+
+    - name: Check UFW Firewall active status
+      ansible.builtin.command: ufw status
+      register: check_ufw
+      changed_when: false
+      failed_when: false
+
+    - name: Check Auditd service status
+      ansible.builtin.command: systemctl is-active auditd
+      register: check_auditd
+      changed_when: false
+      failed_when: false
+
+    - name: Check Fail2ban service status
+      ansible.builtin.command: systemctl is-active fail2ban
+      register: check_fail2ban
+      changed_when: false
+      failed_when: false
+
+    - name: Check /etc/shadow permissions
+      ansible.builtin.stat:
+        path: /etc/shadow
+      register: check_shadow
+
+    - name: Build Audit Evaluation Matrix
+      ansible.builtin.set_fact:
+        audit_results:
+          - category: "Authentication"
+            name: "SSH Direct Root Login Disabled"
+            status: "{{ 'PASS' if check_ssh_root.rc == 0 else 'FAIL' }}"
+            recommendation: "Set 'PermitRootLogin no' in /etc/ssh/sshd_config"
+
+          - category: "Authentication"
+            name: "SSH Password Authentication Disabled"
+            status: "{{ 'PASS' if check_ssh_pass.rc == 0 else 'FAIL' }}"
+            recommendation: "Set 'PasswordAuthentication no' in /etc/ssh/sshd_config"
+
+          - category: "OS Baseline"
+            name: "Address Space Layout Randomization (ASLR) Enabled"
+            status: "{{ 'PASS' if (check_aslr.stdout | default('') == '2') else 'FAIL' }}"
+            recommendation: "Set 'kernel.randomize_va_space = 2' via sysctl"
+
+          - category: "OS Baseline"
+            name: "Process Core Dumps Disabled"
+            status: "{{ 'PASS' if (check_coredump.stdout | default('') == '0') else 'FAIL' }}"
+            recommendation: "Set 'fs.suid_dumpable = 0' via sysctl"
+
+          - category: "Network"
+            name: "UFW Firewall Active & Enforcing"
+            status: "{{ 'PASS' if ('active' in check_ufw.stdout | default('')) else 'FAIL' }}"
+            recommendation: "Enable UFW firewall with 'ufw enable'"
+
+          - category: "Network"
+            name: "Auditd Security Daemon Active"
+            status: "{{ 'PASS' if (check_auditd.stdout | default('') == 'active') else 'FAIL' }}"
+            recommendation: "Start auditd service with 'systemctl start auditd'"
+
+          - category: "Network"
+            name: "Fail2ban Intrusion Prevention Active"
+            status: "{{ 'PASS' if (check_fail2ban.stdout | default('') == 'active') else 'FAIL' }}"
+            recommendation: "Enable fail2ban service with 'systemctl start fail2ban'"
+
+          - category: "Filesystem"
+            name: "/etc/shadow Restricted Permissions (0600/root)"
+            status: "{{ 'PASS' if (check_shadow.stat.mode | default('') in ['0600', '0640']) else 'FAIL' }}"
+            recommendation: "Enforce chmod 0600 on /etc/shadow"
+
+    - name: Compute Compliance Score Statistics
+      ansible.builtin.set_fact:
+        audit_total_count: "{{ audit_results | length }}"
+        audit_pass_count: "{{ audit_results | selectattr('status', 'equalto', 'PASS') | list | length }}"
+        audit_fail_count: "{{ audit_results | selectattr('status', 'equalto', 'FAIL') | list | length }}"
+
+    - name: Display Compliance Audit Score Summary
+      ansible.builtin.debug:
+        msg: "COMPLIANCE SCORE for {{ inventory_hostname }}: {{ (audit_pass_count | float / audit_total_count | float * 100) | round(1) }}% ({{ audit_pass_count }}/{{ audit_total_count }} Passed)"
+
+    - name: Render Audit JSON Report
+      ansible.builtin.template:
+        src: audit_report.json.j2
+        dest: "{{ audit_report_dir }}/audit-report-{{ inventory_hostname }}-{{ ansible_date_time.iso8601_basic_short }}.json"
+      delegate_to: localhost
+      when: audit_generate_json | bool
+
+    - name: Render Audit HTML Report
+      ansible.builtin.template:
+        src: audit_report.html.j2
+        dest: "{{ audit_report_dir }}/audit-report-{{ inventory_hostname }}-{{ ansible_date_time.iso8601_basic_short }}.html"
+      delegate_to: localhost
+      when: audit_generate_html | bool
+
+  rescue:
+    - name: Show failure message but keep going
+      ansible.builtin.debug:
+        msg: "WARNING: compliance_audit_reporter failed on {{ inventory_hostname }}, check manually."

@@ -1,3 +1,13 @@
 # Role: cron_at_restriction
 
-Restricts cron job scheduling and `at` commands strictly to root or designated users via `/etc/cron.allow` and `/etc/at.allow`.
+## Description
+Restricts cron and at job scheduling strictly to root user.
+
+## System Commands & Modifications
+- Writes `/etc/cron.allow` and `/etc/at.allow`
+- Removes `/etc/cron.deny` and `/etc/at.deny`
+
+## Manual Rollback Steps
+```bash
+sudo rm -f /etc/cron.allow /etc/at.allow
+```

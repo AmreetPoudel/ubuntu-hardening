@@ -56,8 +56,13 @@ cat <<EOF > "${ROLE_DIR}/README.md"
 ## Description
 Brief summary of what ${ROLE_NAME} hardens.
 
-## Rollback
-Steps or commands to reverse changes made by ${ROLE_NAME}.
+## System Commands & Modifications
+- Commands executed or files modified by this role.
+
+## Manual Rollback Steps
+```bash
+# Bash commands to reverse changes manually
+```
 EOF
 
 chmod +x "${ROLE_DIR}"

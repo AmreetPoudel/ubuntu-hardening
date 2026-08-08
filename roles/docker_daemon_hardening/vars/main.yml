@@ -1,0 +1,6 @@
+---
+docker_icc: false
+docker_no_new_privileges: true
+docker_userland_proxy: false
+docker_log_driver: "journald"
+docker_live_restore: true

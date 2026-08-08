@@ -1,0 +1,6 @@
+---
+postgres_ssl: "on"
+postgres_password_encryption: "scram-sha-256"
+postgres_log_connections: "on"
+postgres_log_disconnections: "on"
+postgres_listen_addresses: "127.0.0.1"

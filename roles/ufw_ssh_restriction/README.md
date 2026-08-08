@@ -1,3 +1,12 @@
 # Role: ufw_ssh_restriction
 
-Configures UFW firewall rule for SSH port with optional source subnet restriction.
+## Description
+Allows SSH access in UFW with optional IP subnet restriction.
+
+## System Commands & Modifications
+- `ufw allow proto tcp from <allowed_ip> to any port 22`
+
+## Manual Rollback Steps
+```bash
+sudo ufw delete allow 22/tcp
+```

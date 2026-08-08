@@ -1,0 +1,34 @@
+---
+- name: Apply Kubernetes Node & Kubelet hardening
+  block:
+
+    - name: Disable swap memory for Kubelet stability
+      ansible.builtin.command: swapoff -a
+      when: k8s_disable_swap | bool
+      changed_when: false
+      failed_when: false
+
+    - name: Remove swap entry from /etc/fstab
+      ansible.builtin.replace:
+        path: /etc/fstab
+        regexp: '^([^#].*\s+swap\s+.*)$'
+        replace: '# \1'
+      when: k8s_disable_swap | bool
+
+    - name: Check if Kubelet config exists
+      ansible.builtin.stat:
+        path: "{{ k8s_kubelet_config_path }}"
+      register: kubelet_cfg
+
+    - name: Set 0600 permissions on Kubelet configuration
+      ansible.builtin.file:
+        path: "{{ k8s_kubelet_config_path }}"
+        mode: '0600'
+        owner: root
+        group: root
+      when: kubelet_cfg.stat.exists
+
+  rescue:
+    - name: Show failure message but keep going
+      ansible.builtin.debug:
+        msg: "WARNING: k8s_node_hardening failed on {{ inventory_hostname }}, check manually."

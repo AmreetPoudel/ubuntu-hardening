@@ -1,3 +1,12 @@
 # Role: home_dir_perms
 
-Ensures permissions on user home directories under `/home` are restricted to `0750` to prevent unauthorized cross-user reading.
+## Description
+Restricts user home directory permissions under /home to 0750.
+
+## System Commands & Modifications
+- `chmod 0750 /home/*`
+
+## Manual Rollback Steps
+```bash
+sudo chmod 0755 /home/*
+```

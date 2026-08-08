@@ -1,12 +1,12 @@
 # Role: pkg_install_hardening_tools
 
 ## Description
-Installs essential security, firewall, auditing, and integrity monitoring packages (`auditd`, `ufw`, `fail2ban`, `aide`, `debsums`, `apparmor-utils`).
+Installs security auditing, firewall, integrity monitoring, and PAM packages.
 
-## Tasks Executed
-- `apt install` for `hardening_tools_packages`.
+## System Commands & Modifications
+- `apt install auditd debsums fail2ban aide ufw libpam-pwquality apparmor-utils acct`
 
-## Rollback
+## Manual Rollback Steps
 ```bash
-sudo apt remove --purge auditd debsums fail2ban aide ufw libpam-pwquality apparmor-utils acct
+sudo apt remove --purge -y auditd debsums fail2ban aide ufw libpam-pwquality apparmor-utils acct
 ```

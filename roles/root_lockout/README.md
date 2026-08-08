@@ -1,3 +1,12 @@
 # Role: root_lockout
 
-Locks root account direct password authentication, enforcing sudo-based access for system administrators.
+## Description
+Locks direct root password authentication, enforcing sudo-based administration.
+
+## System Commands & Modifications
+- `usermod -L root` or `passwd -l root`
+
+## Manual Rollback Steps
+```bash
+sudo usermod -U root
+```

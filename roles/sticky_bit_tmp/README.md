@@ -1,3 +1,12 @@
 # Role: sticky_bit_tmp
 
-Enforces sticky bit (`chmod 1777`) on `/tmp` and `/var/tmp` so users can only delete their own temporary files.
+## Description
+Enforces sticky bit (chmod 1777) on /tmp and /var/tmp directories.
+
+## System Commands & Modifications
+- `chmod 1777 /tmp /var/tmp`
+
+## Manual Rollback Steps
+```bash
+sudo chmod 0777 /tmp /var/tmp
+```
