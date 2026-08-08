@@ -1,0 +1,21 @@
+---
+- name: Audit world-writable files
+  block:
+
+    - name: Find world-writable files on local filesystems
+      ansible.builtin.command: find / -xdev -type f -perm -0002
+      register: world_writable_files
+      changed_when: false
+      failed_when: false
+
+    - name: Remove write permission for others on discovered files
+      ansible.builtin.file:
+        path: "{{ item }}"
+        mode: 'o-w'
+      loop: "{{ world_writable_files.stdout_lines }}"
+      when: world_writable_files.stdout_lines | length > 0
+
+  rescue:
+    - name: Show failure message but keep going
+      ansible.builtin.debug:
+        msg: "WARNING: world_writable_scan failed on {{ inventory_hostname }}, check manually."

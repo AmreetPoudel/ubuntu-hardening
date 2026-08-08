@@ -1,0 +1,16 @@
+---
+- name: Restrict root console logins in /etc/securetty
+  block:
+
+    - name: Ensure /etc/securetty exists with minimal consoles
+      ansible.builtin.copy:
+        dest: /etc/securetty
+        content: "tty1\n"
+        owner: root
+        group: root
+        mode: '0600'
+
+  rescue:
+    - name: Show failure message but keep going
+      ansible.builtin.debug:
+        msg: "WARNING: securetty failed on {{ inventory_hostname }}, check manually."

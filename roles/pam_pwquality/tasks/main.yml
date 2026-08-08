@@ -1,0 +1,20 @@
+---
+- name: Configure PAM password quality rules
+  block:
+
+    - name: Configure /etc/security/pwquality.conf
+      ansible.builtin.copy:
+        dest: /etc/security/pwquality.conf
+        content: |
+          # PAM Password Quality Settings
+          minlen = {{ pam_minlen }}
+          minclass = {{ pam_minclass }}
+          retry = {{ pam_retry }}
+        owner: root
+        group: root
+        mode: '0644'
+
+  rescue:
+    - name: Show failure message but keep going
+      ansible.builtin.debug:
+        msg: "WARNING: pam_pwquality failed on {{ inventory_hostname }}, check manually."

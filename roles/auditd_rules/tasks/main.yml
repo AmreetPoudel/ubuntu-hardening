@@ -1,0 +1,17 @@
+---
+- name: Configure auditd rules baseline
+  block:
+
+    - name: Deploy CIS audit rules
+      ansible.builtin.template:
+        src: audit.rules.j2
+        dest: /etc/audit/rules.d/audit.rules
+        owner: root
+        group: root
+        mode: '0640'
+      notify: restart auditd
+
+  rescue:
+    - name: Show failure message but keep going
+      ansible.builtin.debug:
+        msg: "WARNING: auditd_rules failed on {{ inventory_hostname }}, check manually."

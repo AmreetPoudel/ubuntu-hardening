@@ -1,0 +1,17 @@
+---
+- name: Restrict /proc process visibility
+  block:
+
+    - name: Ensure /proc is mounted with hidepid setting
+      ansible.posix.mount:
+        path: /proc
+        src: proc
+        fstype: proc
+        opts: "defaults,hidepid={{ proc_hidepid_level }}"
+        state: mounted
+      when: proc_hidepid_level | int > 0
+
+  rescue:
+    - name: Show failure message but keep going
+      ansible.builtin.debug:
+        msg: "WARNING: proc_hidepid failed on {{ inventory_hostname }}, check manually."

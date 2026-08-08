@@ -1,0 +1,19 @@
+---
+- name: Verify APT package integrity with debsums
+  block:
+
+    - name: Run debsums silent verification
+      ansible.builtin.command: debsums -s -c
+      register: debsums_result
+      changed_when: false
+      failed_when: false
+
+    - name: Display modified package files if any
+      ansible.builtin.debug:
+        var: debsums_result.stdout_lines
+      when: debsums_result.stdout_lines | length > 0
+
+  rescue:
+    - name: Show failure message but keep going
+      ansible.builtin.debug:
+        msg: "WARNING: debsums_verification failed on {{ inventory_hostname }}, check manually."

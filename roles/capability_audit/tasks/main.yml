@@ -1,0 +1,18 @@
+---
+- name: Audit Linux file capabilities
+  block:
+
+    - name: Scan system binaries for assigned capabilities
+      ansible.builtin.command: getcap -r /usr /bin /sbin /lib /lib64
+      register: cap_result
+      changed_when: false
+      failed_when: false
+
+    - name: Log discovered binary capabilities
+      ansible.builtin.debug:
+        var: cap_result.stdout_lines
+
+  rescue:
+    - name: Show failure message but keep going
+      ansible.builtin.debug:
+        msg: "WARNING: capability_audit failed on {{ inventory_hostname }}, check manually."

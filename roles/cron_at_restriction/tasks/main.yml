@@ -1,0 +1,32 @@
+---
+- name: Restrict cron and at scheduling access
+  block:
+
+    - name: Create /etc/cron.allow with root user only
+      ansible.builtin.copy:
+        dest: /etc/cron.allow
+        content: "{{ cron_allowed_users | join('\n') }}\n"
+        owner: root
+        group: root
+        mode: '0600'
+
+    - name: Create /etc/at.allow with root user only
+      ansible.builtin.copy:
+        dest: /etc/at.allow
+        content: "{{ cron_allowed_users | join('\n') }}\n"
+        owner: root
+        group: root
+        mode: '0600'
+
+    - name: Remove cron.deny and at.deny files
+      ansible.builtin.file:
+        path: "{{ item }}"
+        state: absent
+      loop:
+        - /etc/cron.deny
+        - /etc/at.deny
+
+  rescue:
+    - name: Show failure message but keep going
+      ansible.builtin.debug:
+        msg: "WARNING: cron_at_restriction failed on {{ inventory_hostname }}, check manually."

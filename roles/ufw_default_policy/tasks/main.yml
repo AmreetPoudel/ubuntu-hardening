@@ -1,0 +1,27 @@
+---
+- name: Configure UFW default traffic policies
+  block:
+
+    - name: Set UFW default input policy
+      community.general.ufw:
+        direction: incoming
+        policy: "{{ ufw_default_input_policy }}"
+
+    - name: Set UFW default output policy
+      community.general.ufw:
+        direction: outgoing
+        policy: "{{ ufw_default_output_policy }}"
+
+    - name: Set UFW default forward policy
+      community.general.ufw:
+        direction: routed
+        policy: "{{ ufw_default_forward_policy }}"
+
+    - name: Enable UFW service
+      community.general.ufw:
+        state: enabled
+
+  rescue:
+    - name: Show failure message but keep going
+      ansible.builtin.debug:
+        msg: "WARNING: ufw_default_policy failed on {{ inventory_hostname }}, check manually."

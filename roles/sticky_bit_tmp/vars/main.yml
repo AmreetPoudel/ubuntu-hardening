@@ -1,0 +1,4 @@
+---
+sticky_dirs:
+  - /tmp
+  - /var/tmp

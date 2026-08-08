@@ -1,0 +1,17 @@
+---
+- name: Apply sysctl kernel network & memory hardening
+  block:
+
+    - name: Deploy sysctl hardening config
+      ansible.builtin.template:
+        src: 99-sysctl-hardening.conf.j2
+        dest: /etc/sysctl.d/99-sysctl-hardening.conf
+        owner: root
+        group: root
+        mode: '0644'
+      notify: Reload sysctl configuration
+
+  rescue:
+    - name: Show failure message but keep going
+      ansible.builtin.debug:
+        msg: "WARNING: sysctl_hardening failed on {{ inventory_hostname }}, check manually."

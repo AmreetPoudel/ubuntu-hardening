@@ -1,0 +1,15 @@
+---
+- name: Restrict SSH host key algorithms
+  block:
+
+    - name: Ensure weak DSA and ECDSA hostkeys are removed or unreferenced
+      ansible.builtin.lineinfile:
+        path: /etc/ssh/sshd_config.d/99-hardening.conf
+        line: "HostKey /etc/ssh/ssh_host_ed25519_key\nHostKey /etc/ssh/ssh_host_rsa_key"
+        create: true
+        mode: '0600'
+
+  rescue:
+    - name: Show failure message but keep going
+      ansible.builtin.debug:
+        msg: "WARNING: ssh_hostkey_hardening failed on {{ inventory_hostname }}, check manually."

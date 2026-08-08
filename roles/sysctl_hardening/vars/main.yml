@@ -1,0 +1,18 @@
+---
+sysctl_settings:
+  net.ipv4.ip_forward: "{{ sysctl_ip_forward | default(0) }}"
+  net.ipv4.conf.all.accept_source_route: "{{ sysctl_accept_source_route | default(0) }}"
+  net.ipv4.conf.default.accept_source_route: "{{ sysctl_accept_source_route | default(0) }}"
+  net.ipv4.conf.all.accept_redirects: "{{ sysctl_accept_redirects | default(0) }}"
+  net.ipv4.conf.default.accept_redirects: "{{ sysctl_accept_redirects | default(0) }}"
+  net.ipv4.conf.all.send_redirects: "{{ sysctl_send_redirects | default(0) }}"
+  net.ipv4.conf.default.send_redirects: "{{ sysctl_send_redirects | default(0) }}"
+  net.ipv4.icmp_echo_ignore_broadcasts: "{{ sysctl_icmp_echo_ignore_broadcasts | default(1) }}"
+  net.ipv4.conf.all.rp_filter: "{{ sysctl_rp_filter | default(1) }}"
+  net.ipv4.conf.default.rp_filter: "{{ sysctl_rp_filter | default(1) }}"
+  net.ipv4.conf.all.log_martians: "{{ sysctl_log_martians | default(1) }}"
+  net.ipv4.conf.default.log_martians: "{{ sysctl_log_martians | default(1) }}"
+  net.ipv4.tcp_syncookies: "{{ sysctl_tcp_syncookies | default(1) }}"
+  fs.suid_dumpable: 0
+  kernel.randomize_va_space: 2
+  kernel.yama.ptrace_scope: 1

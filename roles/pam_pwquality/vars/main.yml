@@ -1,0 +1,4 @@
+---
+pam_minlen: 14
+pam_minclass: 4
+pam_retry: 3

@@ -1,0 +1,20 @@
+---
+- name: Audit system users and accounts
+  block:
+
+    - name: Ensure /etc/passwd and /etc/group formatting is valid
+      ansible.builtin.command: pwck -r
+      register: pwck_result
+      changed_when: false
+      failed_when: false
+
+    - name: Ensure /etc/shadow formatting is valid
+      ansible.builtin.command: grpck -r
+      register: grpck_result
+      changed_when: false
+      failed_when: false
+
+  rescue:
+    - name: Show failure message but keep going
+      ansible.builtin.debug:
+        msg: "WARNING: user_group_audit failed on {{ inventory_hostname }}, check manually."

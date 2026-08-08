@@ -1,0 +1,4 @@
+---
+ufw_default_input_policy: "deny"
+ufw_default_output_policy: "allow"
+ufw_default_forward_policy: "deny"

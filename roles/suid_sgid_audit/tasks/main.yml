@@ -1,0 +1,18 @@
+---
+- name: Audit SUID and SGID binaries
+  block:
+
+    - name: Scan local filesystems for SUID/SGID files
+      ansible.builtin.command: find / -xdev \( -perm -4000 -o -perm -2000 \) -type f
+      register: suid_files
+      changed_when: false
+      failed_when: false
+
+    - name: Log discovered SUID/SGID binaries
+      ansible.builtin.debug:
+        var: suid_files.stdout_lines
+
+  rescue:
+    - name: Show failure message but keep going
+      ansible.builtin.debug:
+        msg: "WARNING: suid_sgid_audit failed on {{ inventory_hostname }}, check manually."

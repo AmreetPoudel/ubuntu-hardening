@@ -1,0 +1,15 @@
+---
+- name: Protect critical configuration files with chattr +i
+  block:
+
+    - name: Apply immutable flag (+i) on target config files
+      ansible.builtin.file:
+        path: "{{ item }}"
+        attributes: "+i"
+      loop: "{{ immutable_files }}"
+      when: enable_chattr_immutable | bool
+
+  rescue:
+    - name: Show failure message but keep going
+      ansible.builtin.debug:
+        msg: "WARNING: chattr_immutable_configs failed on {{ inventory_hostname }}, check manually."

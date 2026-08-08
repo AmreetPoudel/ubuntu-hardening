@@ -1,0 +1,20 @@
+---
+- name: Configure rsyslog file permissions and security drop-in
+  block:
+
+    - name: Deploy rsyslog hardening drop-in
+      ansible.builtin.copy:
+        dest: /etc/rsyslog.d/99-hardening.conf
+        content: |
+          $FileCreateMode {{ rsyslog_file_create_mode }}
+          $DirCreateMode 0750
+          $Umask 0027
+        owner: root
+        group: root
+        mode: '0644'
+      notify: restart rsyslog
+
+  rescue:
+    - name: Show failure message but keep going
+      ansible.builtin.debug:
+        msg: "WARNING: rsyslog_hardening failed on {{ inventory_hostname }}, check manually."

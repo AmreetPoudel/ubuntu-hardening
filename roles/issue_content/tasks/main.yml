@@ -1,0 +1,18 @@
+---
+- name: Sanitize issue banner information leakage
+  block:
+
+    - name: Remove OS and kernel version variables from issue files
+      ansible.builtin.replace:
+        path: "{{ item }}"
+        regexp: '(\\v|\\r|\\m|\\n)'
+        replace: ''
+      loop:
+        - /etc/issue
+        - /etc/issue.net
+      failed_when: false
+
+  rescue:
+    - name: Show failure message but keep going
+      ansible.builtin.debug:
+        msg: "WARNING: issue_content failed on {{ inventory_hostname }}, check manually."

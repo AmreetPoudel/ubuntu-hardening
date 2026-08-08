@@ -1,0 +1,10 @@
+---
+hardening_tools_packages:
+  - auditd
+  - debsums
+  - fail2ban
+  - aide
+  - ufw
+  - libpam-pwquality
+  - apparmor-utils
+  - acct

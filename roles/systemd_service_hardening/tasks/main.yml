@@ -1,0 +1,16 @@
+---
+- name: Apply systemd service sandboxing defaults
+  block:
+
+    - name: Ensure systemd system.conf enables PrivateTmp
+      ansible.builtin.ini_file:
+        path: /etc/systemd/system.conf
+        section: Manager
+        option: DefaultPrivateTmp
+        value: "yes"
+        mode: '0644'
+
+  rescue:
+    - name: Show failure message but keep going
+      ansible.builtin.debug:
+        msg: "WARNING: systemd_service_hardening failed on {{ inventory_hostname }}, check manually."

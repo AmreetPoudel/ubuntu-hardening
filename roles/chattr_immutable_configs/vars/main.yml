@@ -1,0 +1,5 @@
+---
+enable_chattr_immutable: false
+immutable_files:
+  - /etc/pam.d/common-password
+  - /etc/security/pwquality.conf

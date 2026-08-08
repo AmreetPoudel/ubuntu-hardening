@@ -1,0 +1,21 @@
+---
+- name: Enforce strict permissions on /var/log files
+  block:
+
+    - name: Find all log files in /var/log
+      ansible.builtin.find:
+        paths: /var/log
+        file_type: file
+        recurse: true
+      register: log_files
+
+    - name: Remove world read/write/execute and group write/execute from log files
+      ansible.builtin.file:
+        path: "{{ item.path }}"
+        mode: 'g-wx,o-rwx'
+      loop: "{{ log_files.files }}"
+
+  rescue:
+    - name: Show failure message but keep going
+      ansible.builtin.debug:
+        msg: "WARNING: log_file_perms failed on {{ inventory_hostname }}, check manually."

@@ -1,0 +1,2 @@
+---
+rsyslog_file_create_mode: "0640"

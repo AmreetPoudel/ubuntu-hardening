@@ -1,0 +1,4 @@
+---
+journald_storage: persistent
+journald_compress: "yes"
+journald_forward_to_syslog: "yes"

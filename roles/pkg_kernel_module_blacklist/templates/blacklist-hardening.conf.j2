@@ -1,0 +1,6 @@
+{% for mod in kernel_blacklist_modules %}
+install {{ mod }} /bin/true
+{% endfor %}
+{% for mod in kernel_blacklist_modules %}
+blacklist {{ mod }}
+{% endfor %}

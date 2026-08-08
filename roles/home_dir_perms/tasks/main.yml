@@ -1,0 +1,21 @@
+---
+- name: Restrict user home directory permissions
+  block:
+
+    - name: Find all home directories in /home
+      ansible.builtin.find:
+        paths: /home
+        file_type: directory
+        recurse: false
+      register: home_dirs
+
+    - name: Set 0750 permissions on user home directories
+      ansible.builtin.file:
+        path: "{{ item.path }}"
+        mode: "{{ home_dir_mode }}"
+      loop: "{{ home_dirs.files }}"
+
+  rescue:
+    - name: Show failure message but keep going
+      ansible.builtin.debug:
+        msg: "WARNING: home_dir_perms failed on {{ inventory_hostname }}, check manually."

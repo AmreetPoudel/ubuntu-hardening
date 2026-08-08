@@ -1,0 +1,6 @@
+---
+nonessential_suid_binaries:
+  - /usr/bin/chfn
+  - /usr/bin/chsh
+  - /usr/bin/gpasswd
+  - /usr/bin/newgrp

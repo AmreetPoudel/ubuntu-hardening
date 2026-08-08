@@ -1,0 +1,3 @@
+---
+dns_sec_setting: "allow-downgrade"
+dns_over_tls: "opportunistic"

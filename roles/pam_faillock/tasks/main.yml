@@ -1,0 +1,21 @@
+---
+- name: Configure PAM faillock user lockout policy
+  block:
+
+    - name: Configure /etc/security/faillock.conf
+      ansible.builtin.copy:
+        dest: /etc/security/faillock.conf
+        content: |
+          # PAM Faillock Settings
+          deny = {{ faillock_deny }}
+          unlock_time = {{ faillock_unlock_time }}
+          fail_interval = {{ faillock_fail_interval }}
+          silent
+        owner: root
+        group: root
+        mode: '0644'
+
+  rescue:
+    - name: Show failure message but keep going
+      ansible.builtin.debug:
+        msg: "WARNING: pam_faillock failed on {{ inventory_hostname }}, check manually."

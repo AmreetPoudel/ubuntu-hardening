@@ -1,0 +1,21 @@
+---
+- name: Configure systemd journald logging
+  block:
+
+    - name: Configure /etc/systemd/journald.conf drop-in
+      ansible.builtin.copy:
+        dest: /etc/systemd/journald.conf.d/99-hardening.conf
+        content: |
+          [Journal]
+          Storage={{ journald_storage }}
+          Compress={{ journald_compress }}
+          ForwardToSyslog={{ journald_forward_to_syslog }}
+        owner: root
+        group: root
+        mode: '0644'
+      notify: restart systemd-journald
+
+  rescue:
+    - name: Show failure message but keep going
+      ansible.builtin.debug:
+        msg: "WARNING: journald_hardening failed on {{ inventory_hostname }}, check manually."

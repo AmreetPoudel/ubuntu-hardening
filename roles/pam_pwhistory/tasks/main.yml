@@ -1,0 +1,15 @@
+---
+- name: Configure PAM password reuse prevention
+  block:
+
+    - name: Ensure pam_pwhistory is configured in common-password
+      ansible.builtin.lineinfile:
+        path: /etc/pam.d/common-password
+        line: "password required pam_pwhistory.so remember={{ password_remember_count }}"
+        insertbefore: '^password.*pam_unix.so'
+        state: present
+
+  rescue:
+    - name: Show failure message but keep going
+      ansible.builtin.debug:
+        msg: "WARNING: pam_pwhistory failed on {{ inventory_hostname }}, check manually."

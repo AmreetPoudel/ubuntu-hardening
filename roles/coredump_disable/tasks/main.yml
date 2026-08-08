@@ -1,0 +1,26 @@
+---
+- name: Disable system process core dumps
+  block:
+
+    - name: Set core dump soft/hard limits to 0
+      ansible.builtin.copy:
+        dest: /etc/security/limits.d/10-disable-coredumps.conf
+        content: |
+          * hard core 0
+          * soft core 0
+        owner: root
+        group: root
+        mode: '0644'
+
+    - name: Configure systemd coredump storage to none
+      ansible.builtin.ini_file:
+        path: /etc/systemd/coredump.conf
+        section: Coredump
+        option: Storage
+        value: none
+        mode: '0644'
+
+  rescue:
+    - name: Show failure message but keep going
+      ansible.builtin.debug:
+        msg: "WARNING: coredump_disable failed on {{ inventory_hostname }}, check manually."

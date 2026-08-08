@@ -1,0 +1,15 @@
+---
+- name: Lock login shell for system service accounts
+  block:
+
+    - name: Set /usr/sbin/nologin shell for non-root system users
+      ansible.builtin.shell: |
+        awk -F: '($3 < 1000 && $1 != "root" && $7 != "/usr/sbin/nologin" && $7 != "/bin/false") {print $1}' /etc/passwd | while read u; do
+          usermod -s /usr/sbin/nologin "$u"
+        done
+      changed_when: false
+
+  rescue:
+    - name: Show failure message but keep going
+      ansible.builtin.debug:
+        msg: "WARNING: service_account_hardening failed on {{ inventory_hostname }}, check manually."

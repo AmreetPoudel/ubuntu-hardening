@@ -1,0 +1,54 @@
+---
+# Global Hardening Baseline Variables — Shared across all target nodes
+
+# Reporting & Audit
+hardening_log_dir: "/var/log/ansible-hardening"
+hardening_report_file: "/var/log/ansible-hardening/run-summary.log"
+
+# Kernel & System Performance
+sysctl_ip_forward: 0
+sysctl_accept_source_route: 0
+sysctl_accept_redirects: 0
+sysctl_send_redirects: 0
+sysctl_icmp_echo_ignore_broadcasts: 1
+sysctl_rp_filter: 1
+sysctl_log_martians: 1
+sysctl_tcp_syncookies: 1
+disable_ipv6: false
+
+# Mount Hardening
+tmp_mount_options: "defaults,rw,nosuid,nodev,noexec"
+var_tmp_mount_options: "defaults,rw,nosuid,nodev,noexec"
+dev_shm_mount_options: "defaults,rw,nosuid,nodev,noexec"
+
+# SSH Service Parameters
+ssh_port: 22
+ssh_permit_root_login: "no"
+ssh_password_authentication: "no"
+ssh_max_auth_tries: 3
+ssh_client_alive_interval: 300
+ssh_client_alive_count_max: 2
+
+# Authentication & PAM
+pam_password_min_len: 14
+pam_password_min_classes: 4
+pam_faillock_deny: 5
+pam_faillock_unlock_time: 900
+password_max_days: 90
+password_min_days: 7
+password_warn_age: 14
+
+# Network Security & UFW
+ufw_enable: true
+ufw_default_input_policy: "deny"
+ufw_default_output_policy: "allow"
+ufw_default_forward_policy: "deny"
+ufw_allow_ssh_ports:
+  - 22
+
+# System Services
+proc_hidepid_level: 2
+chrony_servers:
+  - "0.ubuntu.pool.ntp.org"
+  - "1.ubuntu.pool.ntp.org"
+  - "2.ubuntu.pool.ntp.org"

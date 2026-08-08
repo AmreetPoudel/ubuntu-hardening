@@ -1,0 +1,14 @@
+---
+- name: Apply rate limiting on SSH port
+  block:
+
+    - name: Set UFW rate limit rule on port 22
+      community.general.ufw:
+        rule: limit
+        port: "{{ ssh_port | default('22') }}"
+        proto: tcp
+
+  rescue:
+    - name: Show failure message but keep going
+      ansible.builtin.debug:
+        msg: "WARNING: ufw_rate_limit_ssh failed on {{ inventory_hostname }}, check manually."

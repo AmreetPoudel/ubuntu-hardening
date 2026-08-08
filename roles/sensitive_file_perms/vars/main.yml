@@ -1,0 +1,7 @@
+---
+sensitive_files:
+  - { path: '/etc/passwd', mode: '0644', owner: 'root', group: 'root' }
+  - { path: '/etc/shadow', mode: '0600', owner: 'root', group: 'shadow' }
+  - { path: '/etc/gshadow', mode: '0600', owner: 'root', group: 'shadow' }
+  - { path: '/etc/group', mode: '0644', owner: 'root', group: 'root' }
+  - { path: '/etc/crontab', mode: '0600', owner: 'root', group: 'root' }

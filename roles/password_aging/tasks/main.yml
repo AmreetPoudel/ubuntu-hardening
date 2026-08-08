@@ -1,0 +1,26 @@
+---
+- name: Configure password expiration rules in login.defs
+  block:
+
+    - name: Set PASS_MAX_DAYS
+      ansible.builtin.lineinfile:
+        path: /etc/login.defs
+        regexp: '^PASS_MAX_DAYS'
+        line: "PASS_MAX_DAYS\t{{ pass_max_days }}"
+
+    - name: Set PASS_MIN_DAYS
+      ansible.builtin.lineinfile:
+        path: /etc/login.defs
+        regexp: '^PASS_MIN_DAYS'
+        line: "PASS_MIN_DAYS\t{{ pass_min_days }}"
+
+    - name: Set PASS_WARN_AGE
+      ansible.builtin.lineinfile:
+        path: /etc/login.defs
+        regexp: '^PASS_WARN_AGE'
+        line: "PASS_WARN_AGE\t{{ pass_warn_age }}"
+
+  rescue:
+    - name: Show failure message but keep going
+      ansible.builtin.debug:
+        msg: "WARNING: password_aging failed on {{ inventory_hostname }}, check manually."

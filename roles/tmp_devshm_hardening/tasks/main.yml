@@ -1,0 +1,24 @@
+---
+- name: Harden /tmp, /var/tmp, and /dev/shm mounts
+  block:
+
+    - name: Ensure /tmp is mounted with secure options
+      ansible.posix.mount:
+        path: /tmp
+        src: tmpfs
+        fstype: tmpfs
+        opts: "{{ tmp_mount_options }}"
+        state: mounted
+
+    - name: Ensure /dev/shm is mounted with secure options
+      ansible.posix.mount:
+        path: /dev/shm
+        src: tmpfs
+        fstype: tmpfs
+        opts: "{{ dev_shm_mount_options }}"
+        state: mounted
+
+  rescue:
+    - name: Show failure message but keep going
+      ansible.builtin.debug:
+        msg: "WARNING: tmp_devshm_hardening failed on {{ inventory_hostname }}, check manually."

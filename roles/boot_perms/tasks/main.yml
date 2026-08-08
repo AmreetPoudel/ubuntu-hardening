@@ -1,0 +1,16 @@
+---
+- name: Secure bootloader and boot directory permissions
+  block:
+
+    - name: Set 0600 mode on GRUB configuration file
+      ansible.builtin.file:
+        path: /boot/grub/grub.cfg
+        mode: '0600'
+        owner: root
+        group: root
+      failed_when: false
+
+  rescue:
+    - name: Show failure message but keep going
+      ansible.builtin.debug:
+        msg: "WARNING: boot_perms failed on {{ inventory_hostname }}, check manually."

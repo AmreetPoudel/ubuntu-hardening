@@ -1,0 +1,16 @@
+---
+- name: Disable unused filesystems
+  block:
+
+    - name: Deploy modprobe fs blacklist config
+      ansible.builtin.template:
+        src: fs-hardening.conf.j2
+        dest: /etc/modprobe.d/fs-hardening.conf
+        owner: root
+        group: root
+        mode: '0644'
+
+  rescue:
+    - name: Show failure message but keep going
+      ansible.builtin.debug:
+        msg: "WARNING: kernel_unused_fs_disable failed on {{ inventory_hostname }}, check manually."

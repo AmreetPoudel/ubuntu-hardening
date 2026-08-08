@@ -1,0 +1,22 @@
+---
+- name: Enforce default umask 027
+  block:
+
+    - name: Set UMASK in /etc/login.defs
+      ansible.builtin.lineinfile:
+        path: /etc/login.defs
+        regexp: '^UMASK'
+        line: "UMASK\t\t{{ system_umask }}"
+
+    - name: Set umask profile script
+      ansible.builtin.copy:
+        dest: /etc/profile.d/99-umask.sh
+        content: "umask {{ system_umask }}\n"
+        owner: root
+        group: root
+        mode: '0644'
+
+  rescue:
+    - name: Show failure message but keep going
+      ansible.builtin.debug:
+        msg: "WARNING: umask_hardening failed on {{ inventory_hostname }}, check manually."

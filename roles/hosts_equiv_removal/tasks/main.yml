@@ -1,0 +1,18 @@
+---
+- name: Remove legacy rsh trust files
+  block:
+
+    - name: Remove /etc/hosts.equiv if present
+      ansible.builtin.file:
+        path: /etc/hosts.equiv
+        state: absent
+
+    - name: Find and remove user .rhosts files
+      ansible.builtin.command: find /home /root -name .rhosts -delete
+      changed_when: false
+      failed_when: false
+
+  rescue:
+    - name: Show failure message but keep going
+      ansible.builtin.debug:
+        msg: "WARNING: hosts_equiv_removal failed on {{ inventory_hostname }}, check manually."

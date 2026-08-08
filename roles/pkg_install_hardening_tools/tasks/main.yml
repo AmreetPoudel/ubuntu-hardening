@@ -1,0 +1,14 @@
+---
+- name: Install hardening and auditing packages
+  block:
+
+    - name: Install security packages via APT
+      ansible.builtin.apt:
+        name: "{{ hardening_tools_packages }}"
+        state: present
+        update_cache: true
+
+  rescue:
+    - name: Show failure message but keep going
+      ansible.builtin.debug:
+        msg: "WARNING: pkg_install_hardening_tools failed on {{ inventory_hostname }}, check manually. Rest of playbook will continue."

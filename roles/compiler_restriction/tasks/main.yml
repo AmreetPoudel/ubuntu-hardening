@@ -1,0 +1,17 @@
+---
+- name: Restrict C/C++ compiler execution permissions
+  block:
+
+    - name: Set 0700 permissions on compilers
+      ansible.builtin.file:
+        path: "{{ item }}"
+        mode: '0700'
+        owner: root
+        group: root
+      loop: "{{ compilers }}"
+      failed_when: false
+
+  rescue:
+    - name: Show failure message but keep going
+      ansible.builtin.debug:
+        msg: "WARNING: compiler_restriction failed on {{ inventory_hostname }}, check manually."

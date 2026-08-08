@@ -1,0 +1,15 @@
+---
+- name: Protect system logs with append-only attribute (+a)
+  block:
+
+    - name: Apply append-only attribute on key log files
+      ansible.builtin.file:
+        path: "{{ item }}"
+        attributes: "+a"
+      loop: "{{ append_only_files }}"
+      when: enable_chattr_append | bool
+
+  rescue:
+    - name: Show failure message but keep going
+      ansible.builtin.debug:
+        msg: "WARNING: chattr_append_logs failed on {{ inventory_hostname }}, check manually."

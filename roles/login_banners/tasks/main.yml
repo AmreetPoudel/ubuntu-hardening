@@ -1,0 +1,20 @@
+---
+- name: Deploy system security warning banners
+  block:
+
+    - name: Set legal warning banner in /etc/issue and /etc/issue.net
+      ansible.builtin.copy:
+        dest: "{{ item }}"
+        content: "{{ banner_text }}"
+        owner: root
+        group: root
+        mode: '0644'
+      loop:
+        - /etc/issue
+        - /etc/issue.net
+        - /etc/motd
+
+  rescue:
+    - name: Show failure message but keep going
+      ansible.builtin.debug:
+        msg: "WARNING: login_banners failed on {{ inventory_hostname }}, check manually."

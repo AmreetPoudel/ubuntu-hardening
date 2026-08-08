@@ -1,0 +1,22 @@
+---
+- name: Initialize AIDE integrity baseline database
+  block:
+
+    - name: Initialize AIDE database if missing
+      ansible.builtin.command: aideinit
+      args:
+        creates: /var/lib/aide/aide.db.new.gz
+      when: init_aide_db | bool
+
+    - name: Copy initial database to active database location
+      ansible.builtin.copy:
+        src: /var/lib/aide/aide.db.new.gz
+        dest: /var/lib/aide/aide.db.gz
+        remote_src: true
+        creates: /var/lib/aide/aide.db.gz
+      when: init_aide_db | bool
+
+  rescue:
+    - name: Show failure message but keep going
+      ansible.builtin.debug:
+        msg: "WARNING: aide_baseline failed on {{ inventory_hostname }}, check manually."

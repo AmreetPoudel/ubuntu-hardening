@@ -1,0 +1,19 @@
+---
+- name: Enforce shell idle auto-logout
+  block:
+
+    - name: Configure interactive shell TMOUT profile script
+      ansible.builtin.copy:
+        dest: /etc/profile.d/99-timeout.sh
+        content: |
+          # Enforce interactive shell auto-logout
+          readonly TMOUT={{ shell_idle_timeout }}
+          export TMOUT
+        owner: root
+        group: root
+        mode: '0644'
+
+  rescue:
+    - name: Show failure message but keep going
+      ansible.builtin.debug:
+        msg: "WARNING: shell_tmout failed on {{ inventory_hostname }}, check manually."

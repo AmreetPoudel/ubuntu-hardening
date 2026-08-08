@@ -1,0 +1,4 @@
+---
+faillock_deny: 5
+faillock_unlock_time: 900
+faillock_fail_interval: 900

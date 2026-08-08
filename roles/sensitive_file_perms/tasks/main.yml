@@ -1,0 +1,16 @@
+---
+- name: Enforce strict file permissions on sensitive system files
+  block:
+
+    - name: Set permissions on sensitive system files
+      ansible.builtin.file:
+        path: "{{ item.path }}"
+        mode: "{{ item.mode }}"
+        owner: "{{ item.owner }}"
+        group: "{{ item.group }}"
+      loop: "{{ sensitive_files }}"
+
+  rescue:
+    - name: Show failure message but keep going
+      ansible.builtin.debug:
+        msg: "WARNING: sensitive_file_perms failed on {{ inventory_hostname }}, check manually."

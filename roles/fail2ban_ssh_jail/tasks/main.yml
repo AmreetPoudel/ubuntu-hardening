@@ -1,0 +1,25 @@
+---
+- name: Configure Fail2ban SSH jail
+  block:
+
+    - name: Deploy sshd jail config
+      ansible.builtin.copy:
+        dest: /etc/fail2ban/jail.d/sshd.local
+        content: |
+          [sshd]
+          enabled = true
+          port = ssh
+          filter = sshd
+          logpath = /var/log/auth.log
+          maxretry = {{ fail2ban_maxretry }}
+          findtime = {{ fail2ban_findtime }}
+          bantime = {{ fail2ban_bantime }}
+        owner: root
+        group: root
+        mode: '0644'
+      notify: restart fail2ban
+
+  rescue:
+    - name: Show failure message but keep going
+      ansible.builtin.debug:
+        msg: "WARNING: fail2ban_ssh_jail failed on {{ inventory_hostname }}, check manually."

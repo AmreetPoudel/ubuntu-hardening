@@ -1,0 +1,22 @@
+# Auditd Security Rules — CIS Ubuntu Baseline
+
+# Remove existing rules
+-D
+
+# Buffer size
+-b 8192
+
+# Failure mode: 1 = printk, 2 = panic
+-f 1
+
+# Audit file modifications
+-w /etc/passwd -p wa -k identity
+-w /etc/group -p wa -k identity
+-w /etc/shadow -p wa -k identity
+-w /etc/sudoers -p wa -k actions
+-w /etc/sudoers.d/ -p wa -k actions
+-w /etc/ssh/sshd_config -p wa -k config_change
+-w /var/log/sudo.log -p wa -k sudo_log
+
+# Make configuration immutable (requires reboot to disable)
+-e 2

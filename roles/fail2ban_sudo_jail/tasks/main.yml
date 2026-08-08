@@ -1,0 +1,23 @@
+---
+- name: Configure Fail2ban sudo jail
+  block:
+
+    - name: Deploy sudo jail config
+      ansible.builtin.copy:
+        dest: /etc/fail2ban/jail.d/sudo.local
+        content: |
+          [sudo]
+          enabled = true
+          filter = sudo
+          logpath = /var/log/auth.log
+          maxretry = 3
+          bantime = 1h
+        owner: root
+        group: root
+        mode: '0644'
+      notify: restart fail2ban
+
+  rescue:
+    - name: Show failure message but keep going
+      ansible.builtin.debug:
+        msg: "WARNING: fail2ban_sudo_jail failed on {{ inventory_hostname }}, check manually."

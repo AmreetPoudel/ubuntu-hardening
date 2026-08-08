@@ -1,0 +1,15 @@
+---
+- name: Strip SUID bit from non-essential system binaries
+  block:
+
+    - name: Remove SUID/SGID permissions on non-essential binaries
+      ansible.builtin.file:
+        path: "{{ item }}"
+        mode: 'u-s,g-s'
+      loop: "{{ nonessential_suid_binaries }}"
+      failed_when: false
+
+  rescue:
+    - name: Show failure message but keep going
+      ansible.builtin.debug:
+        msg: "WARNING: suid_strip_nonessential failed on {{ inventory_hostname }}, check manually."

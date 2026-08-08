@@ -1,0 +1,17 @@
+---
+- name: Audit network exposure and open listening ports
+  block:
+
+    - name: Scan listening sockets with ss
+      ansible.builtin.command: ss -tulpn
+      register: open_ports
+      changed_when: false
+
+    - name: Display open listening ports
+      ansible.builtin.debug:
+        var: open_ports.stdout_lines
+
+  rescue:
+    - name: Show failure message but keep going
+      ansible.builtin.debug:
+        msg: "WARNING: network_exposure_audit failed on {{ inventory_hostname }}, check manually."

@@ -1,0 +1,22 @@
+---
+- name: Audit unowned and ungrouped files
+  block:
+
+    - name: Find files without valid user or group
+      ansible.builtin.command: find / -xdev \( -nouser -o -nogroup \)
+      register: unowned_files
+      changed_when: false
+      failed_when: false
+
+    - name: Assign root ownership to orphan files
+      ansible.builtin.file:
+        path: "{{ item }}"
+        owner: root
+        group: root
+      loop: "{{ unowned_files.stdout_lines }}"
+      when: unowned_files.stdout_lines | length > 0
+
+  rescue:
+    - name: Show failure message but keep going
+      ansible.builtin.debug:
+        msg: "WARNING: unowned_file_scan failed on {{ inventory_hostname }}, check manually."

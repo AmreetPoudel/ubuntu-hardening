@@ -1,0 +1,20 @@
+---
+- name: Harden systemd DNS resolver settings
+  block:
+
+    - name: Deploy systemd-resolved hardening drop-in
+      ansible.builtin.copy:
+        dest: /etc/systemd/resolved.conf.d/99-hardening.conf
+        content: |
+          [Resolve]
+          DNSSEC={{ dns_sec_setting }}
+          DNSOverTLS={{ dns_over_tls }}
+        owner: root
+        group: root
+        mode: '0644'
+      notify: restart systemd-resolved
+
+  rescue:
+    - name: Show failure message but keep going
+      ansible.builtin.debug:
+        msg: "WARNING: dns_resolver_hardening failed on {{ inventory_hostname }}, check manually."

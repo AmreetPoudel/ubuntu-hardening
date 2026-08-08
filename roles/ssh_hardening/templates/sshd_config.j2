@@ -1,0 +1,15 @@
+# Managed by Ansible - Hardened OpenSSH Server Config
+Port {{ ssh_port }}
+Protocol 2
+PermitRootLogin {{ ssh_permit_root_login }}
+PasswordAuthentication {{ ssh_password_authentication }}
+MaxAuthTries {{ ssh_max_auth_tries }}
+X11Forwarding no
+AllowTcpForwarding no
+AllowAgentForwarding no
+ClientAliveInterval {{ ssh_client_alive_interval }}
+ClientAliveCountMax {{ ssh_client_alive_count_max }}
+Banner /etc/issue.net
+Ciphers {{ ssh_ciphers }}
+KexAlgorithms {{ ssh_kex }}
+MACs {{ ssh_macs }}

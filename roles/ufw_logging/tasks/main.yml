@@ -1,0 +1,12 @@
+---
+- name: Configure UFW security logging
+  block:
+
+    - name: Set UFW log level
+      community.general.ufw:
+        logging: "{{ ufw_log_level }}"
+
+  rescue:
+    - name: Show failure message but keep going
+      ansible.builtin.debug:
+        msg: "WARNING: ufw_logging failed on {{ inventory_hostname }}, check manually."

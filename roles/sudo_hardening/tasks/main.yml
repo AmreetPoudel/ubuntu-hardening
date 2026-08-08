@@ -1,0 +1,20 @@
+---
+- name: Apply sudo security policy
+  block:
+
+    - name: Configure sudoers security defaults drop-in
+      ansible.builtin.copy:
+        dest: /etc/sudoers.d/99-sudo-hardening
+        content: |
+          Defaults use_pty
+          Defaults logfile="{{ sudo_logfile }}"
+          Defaults passwd_timeout={{ sudo_timeout }}
+          Defaults secure_path="/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
+        owner: root
+        group: root
+        mode: '0440'
+
+  rescue:
+    - name: Show failure message but keep going
+      ansible.builtin.debug:
+        msg: "WARNING: sudo_hardening failed on {{ inventory_hostname }}, check manually."

@@ -1,0 +1,5 @@
+---
+enable_chattr_append: false
+append_only_files:
+  - /var/log/auth.log
+  - /var/log/syslog

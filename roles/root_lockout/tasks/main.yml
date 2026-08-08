@@ -1,0 +1,14 @@
+---
+- name: Lock direct root account access
+  block:
+
+    - name: Lock root account password
+      ansible.builtin.user:
+        name: root
+        password_lock: true
+      when: lock_root_account | bool
+
+  rescue:
+    - name: Show failure message but keep going
+      ansible.builtin.debug:
+        msg: "WARNING: root_lockout failed on {{ inventory_hostname }}, check manually."

@@ -1,0 +1,4 @@
+{% for fs in unused_fs_modules %}
+install {{ fs }} /bin/true
+blacklist {{ fs }}
+{% endfor %}

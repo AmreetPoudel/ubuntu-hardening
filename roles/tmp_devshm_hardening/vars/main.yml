@@ -1,0 +1,4 @@
+---
+tmp_mount_options: "defaults,rw,nosuid,nodev,noexec"
+var_tmp_mount_options: "defaults,rw,nosuid,nodev,noexec"
+dev_shm_mount_options: "defaults,rw,nosuid,nodev,noexec"

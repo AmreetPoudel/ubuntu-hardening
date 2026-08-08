@@ -1,0 +1,26 @@
+---
+- name: Configure TCP wrappers (/etc/hosts.allow and /etc/hosts.deny)
+  block:
+
+    - name: Configure /etc/hosts.deny default ALL
+      ansible.builtin.copy:
+        dest: /etc/hosts.deny
+        content: "ALL: ALL\n"
+        owner: root
+        group: root
+        mode: '0644'
+
+    - name: Configure /etc/hosts.allow
+      ansible.builtin.copy:
+        dest: /etc/hosts.allow
+        content: |
+          ALL: 127.0.0.1
+          sshd: ALL
+        owner: root
+        group: root
+        mode: '0644'
+
+  rescue:
+    - name: Show failure message but keep going
+      ansible.builtin.debug:
+        msg: "WARNING: tcp_wrappers failed on {{ inventory_hostname }}, check manually."

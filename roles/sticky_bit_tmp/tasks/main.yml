@@ -1,0 +1,15 @@
+---
+- name: Ensure sticky bit on world-writable temporary directories
+  block:
+
+    - name: Set 1777 permissions on temporary directories
+      ansible.builtin.file:
+        path: "{{ item }}"
+        mode: '1777'
+        state: directory
+      loop: "{{ sticky_dirs }}"
+
+  rescue:
+    - name: Show failure message but keep going
+      ansible.builtin.debug:
+        msg: "WARNING: sticky_bit_tmp failed on {{ inventory_hostname }}, check manually."

@@ -1,0 +1,4 @@
+---
+ufw_allow_ssh_ports:
+  - 22
+ssh_allowed_src: "any"

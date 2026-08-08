@@ -1,0 +1,4 @@
+---
+pass_max_days: 90
+pass_min_days: 7
+pass_warn_age: 14
