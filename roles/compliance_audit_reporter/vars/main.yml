@@ -1,4 +1,4 @@
 ---
-audit_report_dir: "{{ playbook_dir }}/reports"
+audit_report_dir: "{{ inventory_dir }}/reports"
 audit_generate_html: true
 audit_generate_json: true

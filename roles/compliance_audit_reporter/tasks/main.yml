@@ -8,8 +8,10 @@
         state: directory
         mode: '0755'
       delegate_to: localhost
+      become: false
       run_once: true
 
+    # --- Authentication & Access Control Checks ---
     - name: Check SSH Root Login status
       ansible.builtin.shell: grep -iE "^PermitRootLogin\s+no" /etc/ssh/sshd_config /etc/ssh/sshd_config.d/*.conf
       register: check_ssh_root
@@ -22,6 +24,94 @@
       changed_when: false
       failed_when: false
 
+    - name: Check SSH MaxAuthTries setting
+      ansible.builtin.shell: grep -iE "^MaxAuthTries\s+[1-4]\b" /etc/ssh/sshd_config /etc/ssh/sshd_config.d/*.conf
+      register: check_ssh_max_auth
+      changed_when: false
+      failed_when: false
+
+    - name: Check SSH Client Idle Timeout
+      ansible.builtin.shell: grep -iE "^ClientAliveInterval\s+[1-9]" /etc/ssh/sshd_config /etc/ssh/sshd_config.d/*.conf
+      register: check_ssh_idle
+      changed_when: false
+      failed_when: false
+
+    - name: Check Root Account Lock status
+      ansible.builtin.shell: passwd -S root | grep -iE "L|LK|NP"
+      register: check_root_lock
+      changed_when: false
+      failed_when: false
+
+    - name: Check PAM Password Quality configuration
+      ansible.builtin.stat:
+        path: /etc/security/pwquality.conf
+      register: check_pwquality
+
+    - name: Check PAM Faillock configuration
+      ansible.builtin.stat:
+        path: /etc/security/faillock.conf
+      register: check_faillock
+
+    - name: Check Shell TMOUT profile script
+      ansible.builtin.stat:
+        path: /etc/profile.d/99-timeout.sh
+      register: check_tmout
+
+    - name: Check Password Max Days in login.defs
+      ansible.builtin.shell: grep -iE "^PASS_MAX_DAYS\s+90" /etc/login.defs
+      register: check_pass_max_days
+      changed_when: false
+      failed_when: false
+
+    - name: Check Sudoers Security Defaults Drop-in
+      ansible.builtin.stat:
+        path: /etc/sudoers.d/99-sudo-hardening
+      register: check_sudoers
+
+    # --- Network & Kernel Firewall Checks ---
+    - name: Check UFW Firewall active status
+      ansible.builtin.command: ufw status
+      register: check_ufw
+      changed_when: false
+      failed_when: false
+
+    - name: Check SYN Cookies sysctl setting
+      ansible.builtin.command: sysctl -n net.ipv4.tcp_syncookies
+      register: check_syncookies
+      changed_when: false
+      failed_when: false
+
+    - name: Check IP Forwarding sysctl setting
+      ansible.builtin.command: sysctl -n net.ipv4.ip_forward
+      register: check_ip_forward
+      changed_when: false
+      failed_when: false
+
+    - name: Check Reverse Path Filtering sysctl setting
+      ansible.builtin.command: sysctl -n net.ipv4.conf.all.rp_filter
+      register: check_rp_filter
+      changed_when: false
+      failed_when: false
+
+    - name: Check ICMP Echo Broadcast Ignore sysctl setting
+      ansible.builtin.command: sysctl -n net.ipv4.icmp_echo_ignore_broadcasts
+      register: check_icmp_echo
+      changed_when: false
+      failed_when: false
+
+    - name: Check ICMP Redirects Accept sysctl setting
+      ansible.builtin.command: sysctl -n net.ipv4.conf.all.accept_redirects
+      register: check_accept_redirects
+      changed_when: false
+      failed_when: false
+
+    - name: Check Fail2ban service status
+      ansible.builtin.command: systemctl is-active fail2ban
+      register: check_fail2ban
+      changed_when: false
+      failed_when: false
+
+    # --- System Baseline & OS Hardening ---
     - name: Check ASLR sysctl setting
       ansible.builtin.command: sysctl -n kernel.randomize_va_space
       register: check_aslr
@@ -34,71 +124,277 @@
       changed_when: false
       failed_when: false
 
-    - name: Check UFW Firewall active status
-      ansible.builtin.command: ufw status
-      register: check_ufw
+    - name: Check Kernel Module Blacklist configuration
+      ansible.builtin.stat:
+        path: /etc/modprobe.d/blacklist-hardening.conf
+      register: check_modprobe_blacklist
+
+    - name: Check Unused Filesystem Blacklist configuration
+      ansible.builtin.stat:
+        path: /etc/modprobe.d/fs-hardening.conf
+      register: check_fs_blacklist
+
+    - name: Check Unattended Upgrades package installation
+      ansible.builtin.command: dpkg-query -W -f='${Status}' unattended-upgrades
+      register: check_unattended_upgrades
       changed_when: false
       failed_when: false
 
+    # --- Filesystem & Permissions Checks ---
+    - name: Check /etc/shadow permissions
+      ansible.builtin.stat:
+        path: /etc/shadow
+      register: check_shadow
+
+    - name: Check /etc/gshadow permissions
+      ansible.builtin.stat:
+        path: /etc/gshadow
+      register: check_gshadow
+
+    - name: Check /etc/passwd permissions
+      ansible.builtin.stat:
+        path: /etc/passwd
+      register: check_passwd
+
+    - name: Check /etc/group permissions
+      ansible.builtin.stat:
+        path: /etc/group
+      register: check_group
+
+    - name: Check /etc/crontab permissions
+      ansible.builtin.stat:
+        path: /etc/crontab
+      register: check_crontab
+
+    - name: Check System UMASK setting in login.defs
+      ansible.builtin.shell: grep -iE "^UMASK\s+027" /etc/login.defs
+      register: check_umask
+      changed_when: false
+      failed_when: false
+
+    # --- Logging & Audit Checks ---
     - name: Check Auditd service status
       ansible.builtin.command: systemctl is-active auditd
       register: check_auditd
       changed_when: false
       failed_when: false
 
-    - name: Check Fail2ban service status
-      ansible.builtin.command: systemctl is-active fail2ban
-      register: check_fail2ban
+    - name: Check Chrony Time Sync service status
+      ansible.builtin.command: systemctl is-active chrony
+      register: check_chrony
       changed_when: false
       failed_when: false
 
-    - name: Check /etc/shadow permissions
+    - name: Check Systemd Journald hardening drop-in
       ansible.builtin.stat:
-        path: /etc/shadow
-      register: check_shadow
+        path: /etc/systemd/journald.conf.d/99-hardening.conf
+      register: check_journald
 
+    - name: Check System Logging Permissions on auth.log
+      ansible.builtin.stat:
+        path: /var/log/auth.log
+      register: check_auth_log
+
+    # --- Build Evaluation Matrix ---
     - name: Build Audit Evaluation Matrix
       ansible.builtin.set_fact:
         audit_results:
+          # Authentication & Access Control (ISO A.5.15 & A.8.5)
           - category: "Authentication"
+            iso_control: "ISO 27001 A.8.5"
             name: "SSH Direct Root Login Disabled"
             status: "{{ 'PASS' if check_ssh_root.rc == 0 else 'FAIL' }}"
             recommendation: "Set 'PermitRootLogin no' in /etc/ssh/sshd_config"
 
           - category: "Authentication"
+            iso_control: "ISO 27001 A.8.5"
             name: "SSH Password Authentication Disabled"
             status: "{{ 'PASS' if check_ssh_pass.rc == 0 else 'FAIL' }}"
             recommendation: "Set 'PasswordAuthentication no' in /etc/ssh/sshd_config"
 
-          - category: "OS Baseline"
-            name: "Address Space Layout Randomization (ASLR) Enabled"
-            status: "{{ 'PASS' if (check_aslr.stdout | default('') == '2') else 'FAIL' }}"
-            recommendation: "Set 'kernel.randomize_va_space = 2' via sysctl"
+          - category: "Authentication"
+            iso_control: "ISO 27001 A.8.5"
+            name: "SSH Max Authentication Tries Restricted (<=4)"
+            status: "{{ 'PASS' if check_ssh_max_auth.rc == 0 else 'FAIL' }}"
+            recommendation: "Set 'MaxAuthTries 3' in /etc/ssh/sshd_config"
 
-          - category: "OS Baseline"
-            name: "Process Core Dumps Disabled"
-            status: "{{ 'PASS' if (check_coredump.stdout | default('') == '0') else 'FAIL' }}"
-            recommendation: "Set 'fs.suid_dumpable = 0' via sysctl"
+          - category: "Authentication"
+            iso_control: "ISO 27001 A.5.15"
+            name: "SSH Interactive Client Timeout Configured"
+            status: "{{ 'PASS' if check_ssh_idle.rc == 0 else 'FAIL' }}"
+            recommendation: "Set 'ClientAliveInterval 300' in /etc/ssh/sshd_config"
 
+          - category: "Authentication"
+            iso_control: "ISO 27001 A.8.5"
+            name: "Root Password Account Locked"
+            status: "{{ 'PASS' if check_root_lock.rc == 0 else 'FAIL' }}"
+            recommendation: "Run 'passwd -l root' to lock direct root password logins"
+
+          - category: "Authentication"
+            iso_control: "ISO 27001 A.5.15"
+            name: "PAM Password Complexity Policy Configured"
+            status: "{{ 'PASS' if check_pwquality.stat.exists else 'FAIL' }}"
+            recommendation: "Deploy /etc/security/pwquality.conf with minlen=14"
+
+          - category: "Authentication"
+            iso_control: "ISO 27001 A.8.5"
+            name: "PAM Account Lockout Policy (faillock) Enforced"
+            status: "{{ 'PASS' if check_faillock.stat.exists else 'FAIL' }}"
+            recommendation: "Deploy /etc/security/faillock.conf with deny=5"
+
+          - category: "Authentication"
+            iso_control: "ISO 27001 A.5.15"
+            name: "Interactive Shell Session Timeout Enforced (TMOUT)"
+            status: "{{ 'PASS' if check_tmout.stat.exists else 'FAIL' }}"
+            recommendation: "Configure TMOUT=900 in /etc/profile.d/99-timeout.sh"
+
+          - category: "Authentication"
+            iso_control: "ISO 27001 A.5.15"
+            name: "Maximum Password Expiration Age Set to 90 Days"
+            status: "{{ 'PASS' if check_pass_max_days.rc == 0 else 'FAIL' }}"
+            recommendation: "Set 'PASS_MAX_DAYS 90' in /etc/login.defs"
+
+          - category: "Authentication"
+            iso_control: "ISO 27001 A.8.5"
+            name: "Sudoers Security Defaults Drop-in Applied"
+            status: "{{ 'PASS' if check_sudoers.stat.exists else 'FAIL' }}"
+            recommendation: "Deploy /etc/sudoers.d/99-sudo-hardening with use_pty, logfile"
+
+          # Network & Kernel Firewall (ISO A.8.20 & A.8.21)
           - category: "Network"
+            iso_control: "ISO 27001 A.8.20"
             name: "UFW Firewall Active & Enforcing"
             status: "{{ 'PASS' if ('active' in check_ufw.stdout | default('')) else 'FAIL' }}"
             recommendation: "Enable UFW firewall with 'ufw enable'"
 
           - category: "Network"
-            name: "Auditd Security Daemon Active"
+            iso_control: "ISO 27001 A.8.20"
+            name: "SYN Flood Cookie Protection Enabled"
+            status: "{{ 'PASS' if (check_syncookies.stdout | default('') == '1') else 'FAIL' }}"
+            recommendation: "Set 'net.ipv4.tcp_syncookies = 1' via sysctl"
+
+          - category: "Network"
+            iso_control: "ISO 27001 A.8.21"
+            name: "IP Forwarding Disabled for Baseline Servers"
+            status: "{{ 'PASS' if (check_ip_forward.stdout | default('') == '0') else 'FAIL' }}"
+            recommendation: "Set 'net.ipv4.ip_forward = 0' via sysctl"
+
+          - category: "Network"
+            iso_control: "ISO 27001 A.8.21"
+            name: "Reverse Path Route Filtering Enabled (rp_filter)"
+            status: "{{ 'PASS' if (check_rp_filter.stdout | default('') == '1') else 'FAIL' }}"
+            recommendation: "Set 'net.ipv4.conf.all.rp_filter = 1' via sysctl"
+
+          - category: "Network"
+            iso_control: "ISO 27001 A.8.20"
+            name: "ICMP Echo Broadcast Request Ignored"
+            status: "{{ 'PASS' if (check_icmp_echo.stdout | default('') == '1') else 'FAIL' }}"
+            recommendation: "Set 'net.ipv4.icmp_echo_ignore_broadcasts = 1' via sysctl"
+
+          - category: "Network"
+            iso_control: "ISO 27001 A.8.20"
+            name: "ICMP Redirect Packet Acceptance Disabled"
+            status: "{{ 'PASS' if (check_accept_redirects.stdout | default('') == '0') else 'FAIL' }}"
+            recommendation: "Set 'net.ipv4.conf.all.accept_redirects = 0' via sysctl"
+
+          - category: "Network"
+            iso_control: "ISO 27001 A.8.20"
+            name: "Fail2ban Intrusion Prevention Daemon Active"
+            status: "{{ 'PASS' if (check_fail2ban.stdout | default('') == 'active') else 'FAIL' }}"
+            recommendation: "Start fail2ban service with 'systemctl start fail2ban'"
+
+          # System Baseline & OS Hardening (ISO A.8.8 & A.8.9)
+          - category: "OS Baseline"
+            iso_control: "ISO 27001 A.8.8"
+            name: "Address Space Layout Randomization (ASLR) Enabled"
+            status: "{{ 'PASS' if (check_aslr.stdout | default('') == '2') else 'FAIL' }}"
+            recommendation: "Set 'kernel.randomize_va_space = 2' via sysctl"
+
+          - category: "OS Baseline"
+            iso_control: "ISO 27001 A.8.8"
+            name: "Process Core Dumps Disabled"
+            status: "{{ 'PASS' if (check_coredump.stdout | default('') == '0') else 'FAIL' }}"
+            recommendation: "Set 'fs.suid_dumpable = 0' via sysctl"
+
+          - category: "OS Baseline"
+            iso_control: "ISO 27001 A.8.8"
+            name: "Unattended Security Upgrades Package Active"
+            status: "{{ 'PASS' if ('installed' in check_unattended_upgrades.stdout | default('')) else 'FAIL' }}"
+            recommendation: "Install and configure unattended-upgrades"
+
+          - category: "OS Baseline"
+            iso_control: "ISO 27001 A.8.8"
+            name: "Legacy Protocol Kernel Modules Blacklisted"
+            status: "{{ 'PASS' if check_modprobe_blacklist.stat.exists else 'FAIL' }}"
+            recommendation: "Deploy /etc/modprobe.d/blacklist-hardening.conf"
+
+          - category: "OS Baseline"
+            iso_control: "ISO 27001 A.8.8"
+            name: "Unused Filesystem Drivers Disabled"
+            status: "{{ 'PASS' if check_fs_blacklist.stat.exists else 'FAIL' }}"
+            recommendation: "Deploy /etc/modprobe.d/fs-hardening.conf"
+
+          # Filesystem Integrity & Permissions (ISO A.8.9 & A.8.12)
+          - category: "Filesystem"
+            iso_control: "ISO 27001 A.8.9"
+            name: "/etc/shadow Restricted Permissions (0600/0640 shadow)"
+            status: "{{ 'PASS' if (check_shadow.stat.mode | default('') in ['0600', '0640']) else 'FAIL' }}"
+            recommendation: "Enforce chmod 0600 on /etc/shadow"
+
+          - category: "Filesystem"
+            iso_control: "ISO 27001 A.8.9"
+            name: "/etc/gshadow Restricted Permissions (0600/0640 shadow)"
+            status: "{{ 'PASS' if (check_gshadow.stat.mode | default('') in ['0600', '0640']) else 'FAIL' }}"
+            recommendation: "Enforce chmod 0600 on /etc/gshadow"
+
+          - category: "Filesystem"
+            iso_control: "ISO 27001 A.8.9"
+            name: "/etc/passwd World Readable Permissions (0644 root)"
+            status: "{{ 'PASS' if (check_passwd.stat.mode | default('') == '0644') else 'FAIL' }}"
+            recommendation: "Enforce chmod 0644 on /etc/passwd"
+
+          - category: "Filesystem"
+            iso_control: "ISO 27001 A.8.9"
+            name: "/etc/group World Readable Permissions (0644 root)"
+            status: "{{ 'PASS' if (check_group.stat.mode | default('') == '0644') else 'FAIL' }}"
+            recommendation: "Enforce chmod 0644 on /etc/group"
+
+          - category: "Filesystem"
+            iso_control: "ISO 27001 A.8.9"
+            name: "/etc/crontab Permissions Restricted (0600 root)"
+            status: "{{ 'PASS' if (check_crontab.stat.mode | default('') in ['0600', '0640']) else 'FAIL' }}"
+            recommendation: "Enforce chmod 0600 on /etc/crontab"
+
+          - category: "Filesystem"
+            iso_control: "ISO 27001 A.8.9"
+            name: "Default System UMASK 027 Configured in login.defs"
+            status: "{{ 'PASS' if check_umask.rc == 0 else 'FAIL' }}"
+            recommendation: "Set 'UMASK 027' in /etc/login.defs"
+
+          # Logging & Auditing (ISO A.8.15)
+          - category: "Logging"
+            iso_control: "ISO 27001 A.8.15"
+            name: "Auditd Security Logging Daemon Active"
             status: "{{ 'PASS' if (check_auditd.stdout | default('') == 'active') else 'FAIL' }}"
             recommendation: "Start auditd service with 'systemctl start auditd'"
 
-          - category: "Network"
-            name: "Fail2ban Intrusion Prevention Active"
-            status: "{{ 'PASS' if (check_fail2ban.stdout | default('') == 'active') else 'FAIL' }}"
-            recommendation: "Enable fail2ban service with 'systemctl start fail2ban'"
+          - category: "Logging"
+            iso_control: "ISO 27001 A.8.15"
+            name: "Chrony Network Time Synchronization Active"
+            status: "{{ 'PASS' if (check_chrony.stdout | default('') == 'active') else 'FAIL' }}"
+            recommendation: "Start chrony service with 'systemctl start chrony'"
 
-          - category: "Filesystem"
-            name: "/etc/shadow Restricted Permissions (0600/root)"
-            status: "{{ 'PASS' if (check_shadow.stat.mode | default('') in ['0600', '0640']) else 'FAIL' }}"
-            recommendation: "Enforce chmod 0600 on /etc/shadow"
+          - category: "Logging"
+            iso_control: "ISO 27001 A.8.15"
+            name: "Systemd Journald Security Hardening Applied"
+            status: "{{ 'PASS' if check_journald.stat.exists else 'FAIL' }}"
+            recommendation: "Deploy /etc/systemd/journald.conf.d/99-hardening.conf"
+
+          - category: "Logging"
+            iso_control: "ISO 27001 A.8.15"
+            name: "Auth Log File Permissions Restricted (0640 adm)"
+            status: "{{ 'PASS' if (check_auth_log.stat.mode | default('') in ['0640', '0600']) else 'FAIL' }}"
+            recommendation: "Set chmod 0640 root:adm on /var/log/auth.log"
 
     - name: Compute Compliance Score Statistics
       ansible.builtin.set_fact:
@@ -115,6 +411,7 @@
         src: audit_report.json.j2
         dest: "{{ audit_report_dir }}/audit-report-{{ inventory_hostname }}-{{ ansible_date_time.iso8601_basic_short }}.json"
       delegate_to: localhost
+      become: false
       when: audit_generate_json | bool
 
     - name: Render Audit HTML Report
@@ -122,7 +419,22 @@
         src: audit_report.html.j2
         dest: "{{ audit_report_dir }}/audit-report-{{ inventory_hostname }}-{{ ansible_date_time.iso8601_basic_short }}.html"
       delegate_to: localhost
+      become: false
       when: audit_generate_html | bool
+
+    - name: Display Generated Report File Locations
+      ansible.builtin.debug:
+        msg:
+          - "=========================================================================="
+          - "📊 AUDIT COMPLIANCE REPORT GENERATED SUCCESSFULLY"
+          - "--------------------------------------------------------------------------"
+          - "Score: {{ (audit_pass_count | float / audit_total_count | float * 100) | round(1) }}% ({{ audit_pass_count }}/{{ audit_total_count }} Passed)"
+          - "HTML REPORT LOCATION : {{ audit_report_dir }}/audit-report-{{ inventory_hostname }}-{{ ansible_date_time.iso8601_basic_short }}.html"
+          - "JSON REPORT LOCATION : {{ audit_report_dir }}/audit-report-{{ inventory_hostname }}-{{ ansible_date_time.iso8601_basic_short }}.json"
+          - "=========================================================================="
+      delegate_to: localhost
+      become: false
+      run_once: true
 
   rescue:
     - name: Show failure message but keep going

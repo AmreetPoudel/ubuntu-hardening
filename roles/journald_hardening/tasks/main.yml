@@ -2,6 +2,14 @@
 - name: Configure systemd journald logging
   block:
 
+    - name: Ensure /etc/systemd/journald.conf.d directory exists
+      ansible.builtin.file:
+        path: /etc/systemd/journald.conf.d
+        state: directory
+        owner: root
+        group: root
+        mode: '0755'
+
     - name: Configure /etc/systemd/journald.conf drop-in
       ansible.builtin.copy:
         dest: /etc/systemd/journald.conf.d/99-hardening.conf

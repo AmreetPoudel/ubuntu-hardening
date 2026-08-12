@@ -2,6 +2,14 @@
 - name: Harden systemd DNS resolver settings
   block:
 
+    - name: Ensure /etc/systemd/resolved.conf.d directory exists
+      ansible.builtin.file:
+        path: /etc/systemd/resolved.conf.d
+        state: directory
+        owner: root
+        group: root
+        mode: '0755'
+
     - name: Deploy systemd-resolved hardening drop-in
       ansible.builtin.copy:
         dest: /etc/systemd/resolved.conf.d/99-hardening.conf

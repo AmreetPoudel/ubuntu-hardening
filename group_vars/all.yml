@@ -46,6 +46,10 @@ ufw_default_forward_policy: "deny"
 ufw_allow_ssh_ports:
   - 22
 
+# Monitoring & Observability Allowances (node_exporter & promtail)
+ufw_allowed_ports:
+  - "9100"  # Prometheus node_exporter
+
 # System Services
 proc_hidepid_level: 2
 chrony_servers:

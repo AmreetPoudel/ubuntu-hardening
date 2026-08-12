@@ -26,14 +26,8 @@
     - role: ipv6_disable
       tags: [ipv6_disable, os_baseline]
 
-    - role: proc_hidepid
-      tags: [proc_hidepid, os_baseline]
-
     - role: tmp_devshm_hardening
       tags: [tmp_devshm_hardening, os_baseline]
-
-    - role: sticky_bit_tmp
-      tags: [sticky_bit_tmp, os_baseline]
 
     - role: coredump_disable
       tags: [coredump_disable, os_baseline]
@@ -41,10 +35,7 @@
     - role: shell_tmout
       tags: [shell_tmout, os_baseline]
 
-    # Authentication & Identity
-    - role: user_group_audit
-      tags: [user_group_audit, auth]
-
+    # Authentication & Access Control
     - role: root_lockout
       tags: [root_lockout, auth]
 
@@ -72,7 +63,7 @@
     - role: login_banners
       tags: [login_banners, auth]
 
-    # Filesystem Integrity
+    # Filesystem & Permissions
     - role: sensitive_file_perms
       tags: [sensitive_file_perms, filesystem]
 
@@ -97,10 +88,7 @@
     - role: chattr_append_logs
       tags: [chattr_append_logs, filesystem]
 
-    - role: aide_baseline
-      tags: [aide_baseline, filesystem, aide]
-
-    # Network Security
+    # Network Security & Firewall
     - role: network_exposure_audit
       tags: [network_exposure_audit, network]
 
@@ -125,18 +113,12 @@
     - role: fail2ban_sudo_jail
       tags: [fail2ban_sudo_jail, network, fail2ban]
 
-    - role: tcp_wrappers
-      tags: [tcp_wrappers, network]
-
     - role: auditd_rules
       tags: [auditd_rules, network, auditd]
 
-    # Additional Controls
+    # Services & Additional Hardening
     - role: cron_at_restriction
       tags: [cron_at_restriction, additional]
-
-    - role: securetty
-      tags: [securetty, additional]
 
     - role: log_file_perms
       tags: [log_file_perms, additional]
@@ -161,9 +143,6 @@
 
     - role: capability_audit
       tags: [capability_audit, additional]
-
-    - role: hosts_equiv_removal
-      tags: [hosts_equiv_removal, additional]
 
     - role: issue_content
       tags: [issue_content, additional]
