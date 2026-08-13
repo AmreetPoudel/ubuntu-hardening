@@ -15,18 +15,17 @@
         replace: '# \1'
       when: k8s_disable_swap | bool
 
-    - name: Check if Kubelet config exists
-      ansible.builtin.stat:
-        path: "{{ k8s_kubelet_config_path }}"
-      register: kubelet_cfg
-
-    - name: Set 0600 permissions on Kubelet configuration
+    - name: Secure permissions on Kubelet configuration files if present
       ansible.builtin.file:
-        path: "{{ k8s_kubelet_config_path }}"
+        path: "{{ item }}"
         mode: '0600'
         owner: root
         group: root
-      when: kubelet_cfg.stat.exists
+      loop:
+        - "/var/lib/kubelet/config.yaml"
+        - "/etc/kubernetes/kubelet.conf"
+        - "/etc/kubernetes/admin.conf"
+      failed_when: false
 
   rescue:
     - name: Show failure message but keep going
