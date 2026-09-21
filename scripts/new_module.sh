@@ -1,70 +1,30 @@
 #!/usr/bin/env bash
-# Generator script to scaffold a new hardening role in standard format.
-
+# Scaffold a new hardening role that follows this project's conventions.
 set -euo pipefail
 
-if [ "$#" -ne 1 ]; then
-    echo "Usage: $0 <role_name>"
-    echo "Example: $0 firewall_nftables"
+if [ "$#" -ne 1 ] || ! [[ "$1" =~ ^[a-z][a-z0-9_]*$ ]]; then
+    echo "Usage: $0 <role_name>   (lowercase letters, digits and underscores)" >&2
+    echo "Example: $0 redis_hardening" >&2
     exit 1
 fi
 
-ROLE_NAME="$1"
-ROLE_DIR="roles/${ROLE_NAME}"
+cd "$(dirname "$0")/.."
+role="roles/$1"
+[ -e "$role" ] && { echo "Error: $role already exists." >&2; exit 1; }
 
-if [ -d "$ROLE_DIR" ]; then
-    echo "Error: Directory ${ROLE_DIR} already exists."
-    exit 1
-fi
-
-echo "Scaffolding new role: ${ROLE_NAME}..."
-
-mkdir -p "${ROLE_DIR}/tasks"
-mkdir -p "${ROLE_DIR}/vars"
-mkdir -p "${ROLE_DIR}/handlers"
-mkdir -p "${ROLE_DIR}/templates"
-
-cat <<EOF > "${ROLE_DIR}/vars/main.yml"
+mkdir -p "$role/tasks"
+cat > "$role/tasks/main.yml" <<TASKS
 ---
-# Module-scoped variables for ${ROLE_NAME}
-${ROLE_NAME}_enabled: true
-EOF
+# Conventions:
+#  - Settings belong in group_vars/all.yml (one policy file), not in the role.
+#  - No block/rescue that swallows errors: a failure must fail the host. Use rescue only to roll back and then fail.
+#  - Validate before replacing a config that can lock people out (validate:, or test then restore).
+#  - Be idempotent and safe in --check mode (read-only commands need check_mode: false).
+#  - Use fully-qualified module names (ansible.builtin.*).
+- name: Describe what $1 enforces
+  ansible.builtin.debug:
+    msg: "Replace me"
+TASKS
 
-cat <<EOF > "${ROLE_DIR}/handlers/main.yml"
----
-# Handlers for ${ROLE_NAME}
-EOF
-
-cat <<EOF > "${ROLE_DIR}/tasks/main.yml"
----
-- name: Execute ${ROLE_NAME} controls
-  block:
-
-    - name: ${ROLE_NAME} baseline task
-      ansible.builtin.debug:
-        msg: "Executing module ${ROLE_NAME}"
-
-  rescue:
-    - name: Show failure message but keep going
-      ansible.builtin.debug:
-        msg: "WARNING: ${ROLE_NAME} failed on {{ inventory_hostname }}, check manually."
-EOF
-
-cat <<EOF > "${ROLE_DIR}/README.md"
-# Role: ${ROLE_NAME}
-
-## Description
-Brief summary of what ${ROLE_NAME} hardens.
-
-## System Commands & Modifications
-- Commands executed or files modified by this role.
-
-## Manual Rollback Steps
-```bash
-# Bash commands to reverse changes manually
-```
-EOF
-
-chmod +x "${ROLE_DIR}"
-
-echo "Successfully scaffolded role at ${ROLE_DIR}!"
+echo "Created $role. Next: add it to a playbook in playbooks/, its settings to group_vars/all.yml,"
+echo "and a check to roles/compliance_audit/vars/main.yml."

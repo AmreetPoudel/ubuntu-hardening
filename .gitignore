@@ -1,1 +1,16 @@
-inventory.ini
+.DS_Store
+*.retry
+__pycache__/
+.ansible/
+
+# Generated audit / scan output (contains host details)
+reports/*
+!reports/.gitkeep
+
+# Vault password files must never be committed
+.vault_pass*
+*.vault_pass
+vault-password*
+
+# Local scratch inventories used for testing
+inventory.test*.ini

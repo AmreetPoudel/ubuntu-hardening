@@ -1,0 +1,10 @@
+---
+profile: production
+exclude_paths:
+  - reports/
+  - .ansible/
+  - tests/
+  - .github/
+skip_list:
+  # Policy variables live centrally in group_vars/all.yml, so role tasks read them without a role-name prefix.
+  - var-naming[no-role-prefix]
