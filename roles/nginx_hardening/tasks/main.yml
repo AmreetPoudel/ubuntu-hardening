@@ -1,23 +1,97 @@
 ---
-- name: Apply Nginx web server security hardening
+- name: Detect Nginx
+  ansible.builtin.stat:
+    path: /etc/nginx/nginx.conf
+  register: nginx_hardening_main
+
+- name: Harden Nginx
+  when: nginx_hardening_main.stat.exists
   block:
+    # Snapshots kept in memory so a failed `nginx -t` can be rolled back exactly.
+    - name: Snapshot nginx.conf
+      ansible.builtin.slurp:
+        src: /etc/nginx/nginx.conf
+      register: nginx_hardening_snapshot
 
-    - name: Check if Nginx directory exists
+    - name: Check for an existing drop-in
       ansible.builtin.stat:
-        path: /etc/nginx
-      register: nginx_dir
+        path: /etc/nginx/conf.d/00-hardening.conf
+      register: nginx_hardening_dropin
 
-    - name: Deploy Nginx security drop-in
+    - name: Snapshot the existing drop-in
+      ansible.builtin.slurp:
+        src: /etc/nginx/conf.d/00-hardening.conf
+      register: nginx_hardening_dropin_snapshot
+      when: nginx_hardening_dropin.stat.exists
+
+    # These directives may only appear once per context, and stock nginx.conf already sets (or comments out) them,
+    # so they are changed in place instead of being repeated in a drop-in, which nginx would reject as a duplicate.
+    - name: Set http-level directives in nginx.conf
+      ansible.builtin.lineinfile:
+        path: /etc/nginx/nginx.conf
+        regexp: '^\s*#?\s*{{ item.key }}\b'
+        line: "\t{{ item.key }} {{ item.value }};"
+        insertafter: '^\s*http\s*\{'
+      loop:
+        - { key: server_tokens, value: "{{ nginx_server_tokens }}" }
+        - { key: ssl_protocols, value: "{{ nginx_ssl_protocols }}" }
+        - { key: ssl_session_tickets, value: "off" }
+      loop_control:
+        label: "{{ item.key }}"
+      register: nginx_hardening_main_conf
+
+    - name: Remove security drop-in from earlier versions of this framework
+      ansible.builtin.file:
+        path: /etc/nginx/conf.d/security.conf
+        state: absent
+
+    - name: Deploy the security headers drop-in
       ansible.builtin.template:
-        src: security.conf.j2
-        dest: /etc/nginx/conf.d/security.conf
+        src: 00-hardening.conf.j2
+        dest: /etc/nginx/conf.d/00-hardening.conf
         owner: root
         group: root
-        mode: '0644'
-      when: nginx_dir.stat.exists
-      notify: reload nginx
+        mode: "0644"
+      register: nginx_hardening_conf
+
+    - name: Test the Nginx configuration
+      ansible.builtin.command: nginx -t
+      changed_when: false
+      check_mode: false
+
+    - name: Reload Nginx
+      ansible.builtin.systemd:
+        name: nginx
+        state: reloaded
+      when: nginx_hardening_conf is changed or nginx_hardening_main_conf is changed
 
   rescue:
-    - name: Show failure message but keep going
-      ansible.builtin.debug:
-        msg: "WARNING: nginx_hardening failed on {{ inventory_hostname }}, check manually."
+    - name: Restore nginx.conf
+      ansible.builtin.copy:
+        content: "{{ nginx_hardening_snapshot.content | b64decode }}"
+        dest: /etc/nginx/nginx.conf
+        owner: root
+        group: root
+        mode: "0644"
+      when: nginx_hardening_snapshot.content is defined
+
+    - name: Restore the previous drop-in
+      ansible.builtin.copy:
+        content: "{{ nginx_hardening_dropin_snapshot.content | b64decode }}"
+        dest: /etc/nginx/conf.d/00-hardening.conf
+        owner: root
+        group: root
+        mode: "0644"
+      when: nginx_hardening_dropin_snapshot.content is defined
+
+    - name: Remove the new drop-in when there was no previous one
+      ansible.builtin.file:
+        path: /etc/nginx/conf.d/00-hardening.conf
+        state: absent
+      when: nginx_hardening_dropin_snapshot.content is not defined
+
+    - name: Stop, Nginx rejected the generated configuration
+      ansible.builtin.fail:
+        msg: >-
+          nginx -t failed on {{ inventory_hostname }} after the hardening changes; they were rolled back and Nginx was left running.
+          Run `nginx -t` on the host to see which directive conflicts.

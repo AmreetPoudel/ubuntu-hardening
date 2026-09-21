@@ -1,42 +1,81 @@
 ---
-- name: Apply PostgreSQL database server hardening
+- name: Find PostgreSQL cluster configuration directories
+  ansible.builtin.find:
+    paths: /etc/postgresql
+    file_type: directory
+    patterns: conf.d
+    recurse: true
+  register: postgres_hardening_confdirs
+
+- name: Harden PostgreSQL
+  when: postgres_hardening_confdirs.matched > 0
   block:
-
-    - name: Find PostgreSQL conf.d directories
-      ansible.builtin.find:
-        paths: /etc/postgresql
-        file_type: directory
-        patterns: "conf.d"
-        recurse: true
-      register: postgres_conf_dirs
-
-    - name: Ensure PostgreSQL data directory permissions are 0700
-      ansible.builtin.file:
-        path: /var/lib/postgresql
-        mode: '0700'
-        owner: postgres
-        group: postgres
-        state: directory
-      when: postgres_conf_dirs.matched > 0
-      failed_when: false
-
-    - name: Deploy PostgreSQL hardening configuration drop-in
-      ansible.builtin.copy:
+    - name: Deploy the hardening configuration drop-in
+      ansible.builtin.template:
+        src: 99-hardening.conf.j2
         dest: "{{ item.path }}/99-hardening.conf"
-        content: |
-          ssl = {{ postgres_ssl }}
-          password_encryption = {{ postgres_password_encryption }}
-          log_connections = {{ postgres_log_connections }}
-          log_disconnections = {{ postgres_log_disconnections }}
-          listen_addresses = '{{ postgres_listen_addresses }}'
         owner: postgres
         group: postgres
-        mode: '0640'
-      loop: "{{ postgres_conf_dirs.files }}"
-      when: postgres_conf_dirs.matched > 0
-      notify: reload postgresql
+        mode: "0640"
+      loop: "{{ postgres_hardening_confdirs.files }}"
+      loop_control:
+        label: "{{ item.path }}"
+      notify: Reload PostgreSQL
+
+    - name: Apply the configuration
+      ansible.builtin.meta: flush_handlers
+
+    # A reload silently keeps the old settings when the new file is invalid, so ask the server itself.
+    - name: Ask the server whether it accepted every setting
+      ansible.builtin.command: psql -X -At -c "select count(*) from pg_file_settings where error is not null"
+      become: true
+      become_user: postgres
+      register: postgres_hardening_errors
+      changed_when: false
+      check_mode: false
+      failed_when: postgres_hardening_errors.stdout | trim != '0'
+
+    - name: Check whether a restart is needed for some settings to take effect
+      ansible.builtin.command: psql -X -At -c "select count(*) from pg_settings where pending_restart"
+      become: true
+      become_user: postgres
+      register: postgres_hardening_pending
+      changed_when: false
+      check_mode: false
+
+    - name: Restart PostgreSQL to apply restart-only settings
+      ansible.builtin.systemd:
+        name: postgresql
+        state: restarted
+      when:
+        - postgres_hardening_pending.stdout | trim != '0'
+        - postgres_allow_restart | bool
+
+    - name: Report pending PostgreSQL restart
+      ansible.builtin.debug:
+        msg: >-
+          Some PostgreSQL settings (e.g. listen_addresses) need a restart on {{ inventory_hostname }};
+          postgres_allow_restart=false so it was not restarted. Restart in your next maintenance window.
+      when:
+        - postgres_hardening_pending.stdout | trim != '0'
+        - not postgres_allow_restart | bool
 
   rescue:
-    - name: Show failure message but keep going
-      ansible.builtin.debug:
-        msg: "WARNING: postgres_hardening failed on {{ inventory_hostname }}, check manually."
+    - name: Remove the drop-in that PostgreSQL did not accept
+      ansible.builtin.file:
+        path: "{{ item.path }}/99-hardening.conf"
+        state: absent
+      loop: "{{ postgres_hardening_confdirs.files }}"
+      loop_control:
+        label: "{{ item.path }}"
+
+    - name: Reload PostgreSQL without the drop-in
+      ansible.builtin.systemd:
+        name: postgresql
+        state: reloaded
+
+    - name: Stop, PostgreSQL rejected the hardening settings
+      ansible.builtin.fail:
+        msg: >-
+          PostgreSQL on {{ inventory_hostname }} rejected 99-hardening.conf; it was removed and the server reloaded.
+          Check the settings (e.g. ssl needs a valid certificate).

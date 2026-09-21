@@ -1,0 +1,10 @@
+# Managed by Ansible (linux-hardening) - local changes will be overwritten.
+ssl = {{ postgres_ssl }}
+ssl_min_protocol_version = '{{ postgres_ssl_min_protocol_version }}'
+password_encryption = {{ postgres_password_encryption }}
+log_connections = {{ postgres_log_connections }}
+log_disconnections = {{ postgres_log_disconnections }}
+log_line_prefix = '{{ postgres_log_line_prefix }}'
+{% if postgres_listen_addresses | length > 0 %}
+listen_addresses = '{{ postgres_listen_addresses }}'
+{% endif %}

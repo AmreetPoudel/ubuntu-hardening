@@ -1,32 +1,46 @@
 ---
-- name: Harden Docker daemon configuration
+- name: Detect Docker Engine
+  ansible.builtin.stat:
+    path: /usr/bin/dockerd
+  register: docker_daemon_engine
+
+- name: Harden the Docker daemon
+  when: docker_daemon_engine.stat.exists
   block:
-
-    - name: Check if Docker service exists
-      ansible.builtin.stat:
+    - name: Ensure /etc/docker exists
+      ansible.builtin.file:
         path: /etc/docker
-      register: docker_dir
-
-    - name: Deploy hardened /etc/docker/daemon.json
-      ansible.builtin.template:
-        src: daemon.json.j2
-        dest: /etc/docker/daemon.json
+        state: directory
         owner: root
         group: root
-        mode: '0644'
-      when: docker_dir.stat.exists
-      notify: restart docker
+        mode: "0755"
 
-    - name: Ensure docker.sock permissions are secure
-      ansible.builtin.file:
-        path: /var/run/docker.sock
+    - name: Check for an existing daemon.json
+      ansible.builtin.stat:
+        path: /etc/docker/daemon.json
+      register: docker_daemon_file
+
+    - name: Read the existing daemon.json
+      ansible.builtin.slurp:
+        src: /etc/docker/daemon.json
+      register: docker_daemon_slurp
+      when: docker_daemon_file.stat.exists
+
+    # Existing settings (registry mirrors, data-root, log options, ...) are preserved; only the hardening keys are set.
+    - name: Merge hardening settings into the existing configuration
+      ansible.builtin.set_fact:
+        docker_daemon_merged: >-
+          {{ ((docker_daemon_slurp.content | b64decode | from_json)
+              if docker_daemon_file.stat.exists and (docker_daemon_slurp.content | b64decode | trim | length > 0) else {})
+             | combine(docker_daemon_settings, docker_daemon_overrides) }}
+
+    - name: Deploy daemon.json
+      ansible.builtin.copy:
+        dest: /etc/docker/daemon.json
+        content: "{{ docker_daemon_merged | to_nice_json(indent=2, sort_keys=True) }}\n"
         owner: root
-        group: docker
-        mode: '0660'
-      when: docker_dir.stat.exists
-      failed_when: false
-
-  rescue:
-    - name: Show failure message but keep going
-      ansible.builtin.debug:
-        msg: "WARNING: docker_daemon_hardening failed on {{ inventory_hostname }}, check manually."
+        group: root
+        mode: "0644"
+        backup: true
+        validate: /usr/bin/dockerd --validate --config-file=%s
+      notify: Docker daemon configuration changed

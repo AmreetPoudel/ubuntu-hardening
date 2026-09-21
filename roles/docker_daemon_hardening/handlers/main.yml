@@ -1,5 +1,17 @@
 ---
-- name: restart docker
-  ansible.builtin.service:
+# Restarting dockerd stops every container unless live-restore is already active, so a production host
+# only restarts when docker_allow_restart is set; otherwise the change applies at the next planned restart.
+- name: Restart Docker
+  ansible.builtin.systemd:
     name: docker
     state: restarted
+  when: docker_allow_restart | bool
+  listen: Docker daemon configuration changed
+
+- name: Report pending Docker restart
+  ansible.builtin.debug:
+    msg: >-
+      /etc/docker/daemon.json changed on {{ inventory_hostname }} but Docker was NOT restarted
+      (docker_allow_restart=false). Restart Docker in your next maintenance window to apply it.
+  when: not docker_allow_restart | bool
+  listen: Docker daemon configuration changed

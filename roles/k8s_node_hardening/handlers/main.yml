@@ -1,5 +1,4 @@
 ---
-- name: restart kubelet
-  ansible.builtin.service:
-    name: kubelet
-    state: restarted
+- name: Reload Kubernetes sysctl settings
+  ansible.builtin.command: sysctl -e --system
+  changed_when: true
