@@ -1,8 +1,0 @@
----
-unused_fs_modules:
-  - cramfs
-  - freevxfs
-  - jffs2
-  - hfs
-  - hfsplus
-  - udf

@@ -1,5 +1,0 @@
----
-compilers:
-  - /usr/bin/gcc
-  - /usr/bin/g++
-  - /usr/bin/as
