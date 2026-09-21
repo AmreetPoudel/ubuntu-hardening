@@ -1,19 +1,18 @@
 ---
-- name: Enforce shell idle auto-logout
-  block:
+- name: Enforce idle timeout for interactive shells
+  ansible.builtin.copy:
+    dest: /etc/profile.d/99-tmout.sh
+    content: |
+      # Managed by Ansible (linux-hardening)
+      # Assign only when needed: TMOUT is read-only after the first login script ran.
+      [ "${TMOUT:-}" = "{{ shell_idle_timeout }}" ] || TMOUT={{ shell_idle_timeout }}
+      readonly TMOUT
+      export TMOUT
+    owner: root
+    group: root
+    mode: "0644"
 
-    - name: Configure interactive shell TMOUT profile script
-      ansible.builtin.copy:
-        dest: /etc/profile.d/99-timeout.sh
-        content: |
-          # Enforce interactive shell auto-logout
-          readonly TMOUT={{ shell_idle_timeout }}
-          export TMOUT
-        owner: root
-        group: root
-        mode: '0644'
-
-  rescue:
-    - name: Show failure message but keep going
-      ansible.builtin.debug:
-        msg: "WARNING: shell_tmout failed on {{ inventory_hostname }}, check manually."
+- name: Remove script from earlier versions of this framework
+  ansible.builtin.file:
+    path: /etc/profile.d/99-timeout.sh
+    state: absent

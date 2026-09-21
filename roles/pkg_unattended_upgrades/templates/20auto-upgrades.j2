@@ -1,0 +1,4 @@
+// Managed by Ansible (linux-hardening) - local changes will be overwritten.
+APT::Periodic::Update-Package-Lists "{{ 1 if unattended_upgrades_enabled | bool else 0 }}";
+APT::Periodic::Unattended-Upgrade "{{ 1 if unattended_upgrades_enabled | bool else 0 }}";
+APT::Periodic::AutocleanInterval "7";

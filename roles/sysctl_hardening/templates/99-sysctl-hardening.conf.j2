@@ -1,4 +1,5 @@
-# Sysctl Hardening baseline configuration
-{% for key, val in sysctl_settings.items() %}
-{{ key }} = {{ val }}
+# Managed by Ansible (linux-hardening) - local changes will be overwritten.
+# Values come from sysctl_settings in group_vars/all.yml, merged with sysctl_overrides.
+{% for key, value in (sysctl_settings | combine(sysctl_overrides)).items() | sort %}
+{{ key }} = {{ value }}
 {% endfor %}

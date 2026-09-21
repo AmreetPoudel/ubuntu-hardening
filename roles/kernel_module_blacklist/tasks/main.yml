@@ -1,0 +1,32 @@
+---
+- name: Deploy kernel module blacklist
+  ansible.builtin.template:
+    src: hardening-blacklist.conf.j2
+    dest: /etc/modprobe.d/hardening-blacklist.conf
+    owner: root
+    group: root
+    mode: "0644"
+
+- name: Remove blacklist files from earlier versions of this framework
+  ansible.builtin.file:
+    path: "/etc/modprobe.d/{{ item }}"
+    state: absent
+  loop:
+    - blacklist-hardening.conf
+    - fs-hardening.conf
+
+- name: Read currently loaded kernel modules
+  ansible.builtin.command: lsmod
+  register: kernel_module_blacklist_lsmod
+  changed_when: false
+  check_mode: false
+
+- name: Unload blacklisted modules that are currently loaded and unused
+  community.general.modprobe:
+    name: "{{ item }}"
+    state: absent
+  loop: >-
+    {{ kernel_blacklist_modules | difference(kernel_blacklist_exclude)
+       | intersect(kernel_module_blacklist_lsmod.stdout_lines[1:] | map('split') | map('first') | list) }}
+  # A module that is busy cannot be unloaded; the blacklist still applies from the next boot.
+  failed_when: false

@@ -1,17 +1,54 @@
 ---
-- name: Apply sysctl kernel network & memory hardening
-  block:
+- name: Deploy sysctl hardening settings
+  ansible.builtin.template:
+    src: 99-sysctl-hardening.conf.j2
+    dest: /etc/sysctl.d/99-sysctl-hardening.conf
+    owner: root
+    group: root
+    mode: "0644"
 
-    - name: Deploy sysctl hardening config
-      ansible.builtin.template:
-        src: 99-sysctl-hardening.conf.j2
-        dest: /etc/sysctl.d/99-sysctl-hardening.conf
-        owner: root
-        group: root
-        mode: '0644'
-      notify: Reload sysctl configuration
+- name: Remove sysctl file from earlier versions of this framework
+  ansible.builtin.file:
+    path: /etc/sysctl.d/99-ipv6-hardening.conf
+    state: absent
 
-  rescue:
-    - name: Show failure message but keep going
-      ansible.builtin.debug:
-        msg: "WARNING: sysctl_hardening failed on {{ inventory_hostname }}, check manually."
+# The file only takes effect at boot. Comparing the live values with the policy (instead of reloading only
+# when the file changed) also applies settings after an interrupted earlier run and reverts manual drift.
+- name: Read live kernel parameters
+  ansible.builtin.command: sysctl -a
+  register: sysctl_hardening_live
+  changed_when: false
+  failed_when: false
+  check_mode: false
+
+- name: Work out which parameters differ from the policy
+  ansible.builtin.set_fact:
+    sysctl_hardening_drift: >-
+      {% set live = {} -%}
+      {% for line in sysctl_hardening_live.stdout_lines -%}
+      {% set p = line.split(' = ', 1) -%}
+      {% if p | length == 2 %}{% set _ = live.update({p[0]: p[1] | regex_replace('\s+', ' ') | trim}) %}{% endif -%}
+      {% endfor -%}
+      {% set out = [] -%}
+      {% for key, value in (sysctl_settings | combine(sysctl_overrides)).items() | sort -%}
+      {% if key in live and live[key] != value | string %}{% set _ = out.append({'key': key, 'value': value | string}) %}{% endif -%}
+      {% endfor -%}
+      {{ out }}
+
+- name: Apply parameters that differ
+  ansible.builtin.command: "sysctl -w {{ item.key }}={{ item.value }}"
+  loop: "{{ sysctl_hardening_drift }}"
+  loop_control:
+    label: "{{ item.key }}={{ item.value }}"
+  register: sysctl_hardening_apply
+  changed_when: true
+  # Some keys cannot be changed at runtime (e.g. read-only inside containers). They stay persisted in the
+  # file for the next boot, and the audit reports any that are still not in effect.
+  failed_when: false
+
+- name: Report parameters the kernel refused to change
+  ansible.builtin.debug:
+    msg: "{{ inventory_hostname }}: could not apply {{ item.item.key }}={{ item.item.value }} now ({{ item.stderr | default('') | trim }})"
+  loop: "{{ sysctl_hardening_apply.results | selectattr('rc', 'defined') | rejectattr('rc', 'equalto', 0) | list }}"
+  loop_control:
+    label: "{{ item.item.key }}"

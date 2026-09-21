@@ -1,0 +1,49 @@
+---
+# ansible_facts.mounts leaves out tmpfs and other pseudo filesystems, so ask findmnt directly.
+- name: "Inspect the current mount of {{ mnt.path }}"
+  ansible.builtin.command: "findmnt --noheadings --raw --output FSTYPE,OPTIONS --mountpoint {{ mnt.path }}"
+  register: tmp_devshm_findmnt
+  changed_when: false
+  failed_when: false
+  check_mode: false
+
+- name: "Record the current mount of {{ mnt.path }}"
+  ansible.builtin.set_fact:
+    tmp_devshm_current: >-
+      {{ {'fstype': tmp_devshm_findmnt.stdout.split()[0], 'options': tmp_devshm_findmnt.stdout.split()[1]}
+         if tmp_devshm_findmnt.rc == 0 and tmp_devshm_findmnt.stdout.split() | length == 2 else {} }}
+
+- name: "Compute the wanted mount options of {{ mnt.path }}"
+  ansible.builtin.set_fact:
+    tmp_devshm_wanted: "{{ mnt.options.split(',') | map('trim') | list }}"
+    tmp_devshm_have: "{{ (tmp_devshm_current.options | default('')).split(',') }}"
+
+- name: "Persist tmpfs options in fstab for {{ mnt.path }}"
+  ansible.posix.mount:
+    path: "{{ mnt.path }}"
+    src: tmpfs
+    fstype: tmpfs
+    opts: "{{ (['defaults'] + tmp_devshm_wanted + (['size=' ~ mnt.size] if mnt.size | length > 0 else [])) | join(',') }}"
+    state: present
+  # A real partition mounted here is the administrator's decision; do not turn it into tmpfs.
+  when: tmp_devshm_current.fstype | default('tmpfs') == 'tmpfs'
+
+- name: "Check whether the live mount differs for {{ mnt.path }}"
+  ansible.builtin.set_fact:
+    tmp_devshm_remount: >-
+      {% set ns = namespace(differs=false) -%}
+      {% for flag in ['suid', 'dev', 'exec'] -%}
+      {% if (('no' ~ flag) in tmp_devshm_wanted) != (('no' ~ flag) in tmp_devshm_have) %}{% set ns.differs = true %}{% endif -%}
+      {% endfor -%}
+      {{ ns.differs }}
+    tmp_devshm_remount_opts: >-
+      {% for flag in ['suid', 'dev', 'exec'] -%}
+      {{ ('no' ~ flag) if ('no' ~ flag) in tmp_devshm_wanted else flag }}{{ ',' if not loop.last }}
+      {%- endfor %}
+
+- name: "Apply the options to the running mount of {{ mnt.path }}"
+  ansible.builtin.command: "mount -o remount,{{ tmp_devshm_remount_opts | trim }} {{ mnt.path }}"  # noqa: command-instead-of-module
+  changed_when: true
+  when:
+    - tmp_devshm_current | length > 0
+    - tmp_devshm_remount | trim | bool

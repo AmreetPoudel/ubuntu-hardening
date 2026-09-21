@@ -1,0 +1,11 @@
+// Managed by Ansible (linux-hardening) - local changes will be overwritten.
+Unattended-Upgrade::Remove-Unused-Kernel-Packages "true";
+Unattended-Upgrade::Remove-Unused-Dependencies "true";
+Unattended-Upgrade::Automatic-Reboot "{{ 'true' if unattended_upgrades_auto_reboot | bool else 'false' }}";
+{% if unattended_upgrades_blacklist | length > 0 %}
+Unattended-Upgrade::Package-Blacklist {
+{% for pkg in unattended_upgrades_blacklist %}
+    "{{ pkg }}";
+{% endfor %}
+};
+{% endif %}

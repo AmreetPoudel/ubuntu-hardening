@@ -1,0 +1,5 @@
+# Managed by Ansible (linux-hardening) - local changes will be overwritten.
+{% for module in kernel_blacklist_modules | difference(kernel_blacklist_exclude) | sort %}
+blacklist {{ module }}
+install {{ module }} /bin/false
+{% endfor %}

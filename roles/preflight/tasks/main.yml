@@ -1,0 +1,61 @@
+---
+# Fail fast, before anything is changed, if the run could lock us out or
+# would be applied to something this framework was not written for.
+
+- name: Require a supported ansible-core on the control node
+  ansible.builtin.assert:
+    that: ansible_version.full is version('2.16', '>=')
+    fail_msg: "ansible-core 2.16 or newer is required (found {{ ansible_version.full }})."
+    quiet: true
+  run_once: true
+
+- name: Require a supported target OS
+  ansible.builtin.assert:
+    that:
+      - ansible_facts['distribution'] == 'Ubuntu'
+      - ansible_facts['distribution_version'] is version('24.04', '==')
+    fail_msg: >-
+      {{ inventory_hostname }} runs {{ ansible_facts['distribution'] }} {{ ansible_facts['distribution_version'] }}.
+      This framework targets Ubuntu 24.04 LTS. Set hardening_allow_unsupported_os=true to override at your own risk.
+    quiet: true
+  when: not hardening_allow_unsupported_os | bool
+
+- name: Require systemd on the target
+  ansible.builtin.assert:
+    that: ansible_facts['service_mgr'] == 'systemd'
+    fail_msg: "{{ inventory_hostname }} is not running systemd."
+    quiet: true
+
+- name: Require an explicit, non-root connection user
+  ansible.builtin.assert:
+    that:
+      - ansible_user is defined
+      - ansible_user != 'root'
+    fail_msg: >-
+      Connect as an unprivileged sudo user (set ansible_user in the inventory).
+      Root SSH login and the root password are disabled by this framework, so a root connection would be locked out.
+    quiet: true
+
+- name: Validate critical policy values
+  ansible.builtin.assert:
+    that:
+      - ssh_port | int > 0
+      - ssh_port | int < 65536
+      - ssh_password_authentication in ['yes', 'no']
+      - ufw_default_incoming in ['deny', 'reject']
+      - hardening_mgmt_cidrs is sequence
+    fail_msg: "Invalid value in group_vars (ssh_port, ssh_password_authentication, ufw_default_incoming or hardening_mgmt_cidrs)."
+    quiet: true
+
+- name: Require free disk space on the root filesystem
+  ansible.builtin.assert:
+    that: >-
+      (ansible_facts['mounts'] | selectattr('mount', 'equalto', '/') | map(attribute='size_available') | first | default(1073741824))
+      > 209715200
+    fail_msg: "Less than 200 MB free on / on {{ inventory_hostname }}; refusing to install or rewrite configuration."
+    quiet: true
+
+# Containers share the host kernel: AppArmor, auditd and similar kernel-level services cannot be managed from inside.
+- name: Detect container targets
+  ansible.builtin.set_fact:
+    hardening_is_container: "{{ ansible_facts['virtualization_type'] | default('') in ['docker', 'podman', 'lxc', 'nspawn', 'container'] }}"

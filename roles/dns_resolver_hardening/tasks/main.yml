@@ -1,28 +1,33 @@
 ---
-- name: Harden systemd DNS resolver settings
-  block:
+# Hosts that resolve through something else (static resolv.conf, a local DNS server) are left alone.
 
-    - name: Ensure /etc/systemd/resolved.conf.d directory exists
-      ansible.builtin.file:
-        path: /etc/systemd/resolved.conf.d
-        state: directory
-        owner: root
-        group: root
-        mode: '0755'
+- name: Check whether systemd-resolved manages DNS on this host
+  ansible.builtin.command: systemctl is-enabled systemd-resolved  # noqa: command-instead-of-module
+  register: dns_resolver_enabled
+  changed_when: false
+  failed_when: false
+  check_mode: false
+  when: dns_resolver_manage | bool
 
-    - name: Deploy systemd-resolved hardening drop-in
-      ansible.builtin.copy:
-        dest: /etc/systemd/resolved.conf.d/99-hardening.conf
-        content: |
-          [Resolve]
-          DNSSEC={{ dns_sec_setting }}
-          DNSOverTLS={{ dns_over_tls }}
-        owner: root
-        group: root
-        mode: '0644'
-      notify: restart systemd-resolved
+- name: Ensure resolved drop-in directory exists
+  ansible.builtin.file:
+    path: /etc/systemd/resolved.conf.d
+    state: directory
+    owner: root
+    group: root
+    mode: "0755"
+  when: dns_resolver_manage | bool and dns_resolver_enabled.rc == 0
 
-  rescue:
-    - name: Show failure message but keep going
-      ansible.builtin.debug:
-        msg: "WARNING: dns_resolver_hardening failed on {{ inventory_hostname }}, check manually."
+- name: Deploy systemd-resolved hardening drop-in
+  ansible.builtin.copy:
+    dest: /etc/systemd/resolved.conf.d/99-hardening.conf
+    content: |
+      # Managed by Ansible (linux-hardening)
+      [Resolve]
+      DNSSEC={{ dns_sec_setting }}
+      DNSOverTLS={{ dns_over_tls }}
+    owner: root
+    group: root
+    mode: "0644"
+  when: dns_resolver_manage | bool and dns_resolver_enabled.rc == 0
+  notify: Restart systemd-resolved

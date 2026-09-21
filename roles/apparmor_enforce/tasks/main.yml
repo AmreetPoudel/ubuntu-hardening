@@ -1,0 +1,16 @@
+---
+# Some kernels and container hosts ship without AppArmor; starting its unit there would fail the whole run.
+- name: Check whether the running kernel supports AppArmor
+  ansible.builtin.stat:
+    path: /sys/module/apparmor/parameters/enabled
+  register: apparmor_enforce_kernel
+
+- name: Ensure AppArmor is enabled and running
+  ansible.builtin.systemd:
+    name: apparmor
+    enabled: true
+    state: started
+  when:
+    - apparmor_enforce_enabled | bool
+    - apparmor_enforce_kernel.stat.exists
+    - not hardening_is_container | bool

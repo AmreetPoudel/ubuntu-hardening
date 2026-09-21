@@ -1,24 +1,23 @@
 ---
-- name: Harden /tmp, /var/tmp, and /dev/shm mounts
-  block:
+# Ubuntu does not mount /tmp separately by default. Mounting a fresh tmpfs over a live /tmp would hide
+# files in use, so /tmp is persisted in fstab (effective at next boot) and only remounted with the new
+# options when it already is a mount point. /dev/shm is always a mount and can be remounted live.
 
-    - name: Ensure /tmp is mounted with secure options
-      ansible.posix.mount:
-        path: /tmp
-        src: tmpfs
-        fstype: tmpfs
-        opts: "{{ tmp_mount_options }}"
-        state: mounted
+- name: Harden temporary filesystem mounts
+  ansible.builtin.include_tasks: mount.yml
+  loop:
+    - { path: /tmp, options: "{{ tmp_mount_options }}", size: "{{ tmp_tmpfs_size }}" }
+    - { path: /dev/shm, options: "{{ dev_shm_mount_options }}", size: "" }
+  loop_control:
+    loop_var: mnt
+    label: "{{ mnt.path }}"
+  when: tmp_mount_manage | bool
 
-    - name: Ensure /dev/shm is mounted with secure options
-      ansible.posix.mount:
-        path: /dev/shm
-        src: tmpfs
-        fstype: tmpfs
-        opts: "{{ dev_shm_mount_options }}"
-        state: mounted
-
-  rescue:
-    - name: Show failure message but keep going
-      ansible.builtin.debug:
-        msg: "WARNING: tmp_devshm_hardening failed on {{ inventory_hostname }}, check manually."
+- name: Ensure sticky bit on world-writable temporary directories
+  ansible.builtin.file:
+    path: "{{ item }}"
+    state: directory
+    mode: "1777"
+  loop:
+    - /tmp
+    - /var/tmp
