@@ -1,160 +1,60 @@
 ---
-- name: Ubuntu 24.04 Base OS Hardening Playbook
+# Base OS hardening for every managed host. Roles are ordered so that anything that installs packages runs
+# before controls that would get in its way (noexec /tmp), and so that SSH is never firewalled or reconfigured
+# before the firewall already allows it.
+- name: Ubuntu 24.04 base OS hardening
   hosts: standalone:docker_nodes:k8s_nodes:db_nodes:web_nodes
   become: true
+  gather_facts: true
+  serial: "{{ hardening_serial | default('25%') }}"
+  max_fail_percentage: 0
+  # A failed task must not discard handlers already notified (reloads/restarts of changed config).
+  force_handlers: true
 
   roles:
-    # OS Baseline
-    - role: pkg_remove_legacy
-      tags: [pkg_remove_legacy, os_baseline]
+    - { role: preflight, tags: [always] }
 
-    - role: pkg_install_hardening_tools
-      tags: [pkg_install_hardening_tools, os_baseline]
+    # Packages and updates
+    - { role: pkg_remove_legacy, tags: [pkg_remove_legacy, packages] }
+    - { role: pkg_install_hardening_tools, tags: [pkg_install_hardening_tools, packages] }
+    - { role: pkg_unattended_upgrades, tags: [pkg_unattended_upgrades, packages] }
+    - { role: ntp_hardening, tags: [ntp_hardening, os_baseline] }
 
-    - role: pkg_unattended_upgrades
-      tags: [pkg_unattended_upgrades, os_baseline]
+    # OS baseline
+    - { role: kernel_module_blacklist, tags: [kernel_module_blacklist, os_baseline] }
+    - { role: sysctl_hardening, tags: [sysctl_hardening, os_baseline] }
+    - { role: coredump_disable, tags: [coredump_disable, os_baseline] }
+    - { role: shell_tmout, tags: [shell_tmout, os_baseline] }
+    - { role: umask_hardening, tags: [umask_hardening, os_baseline] }
+    - { role: services_disable, tags: [services_disable, os_baseline] }
+    - { role: apparmor_enforce, tags: [apparmor_enforce, os_baseline] }
+    - { role: dns_resolver_hardening, tags: [dns_resolver_hardening, os_baseline] }
 
-    - role: pkg_kernel_module_blacklist
-      tags: [pkg_kernel_module_blacklist, os_baseline]
+    # Authentication and access control
+    - { role: root_lockout, tags: [root_lockout, auth] }
+    - { role: pam_hardening, tags: [pam_hardening, auth] }
+    - { role: password_aging, tags: [password_aging, auth] }
+    - { role: sudo_hardening, tags: [sudo_hardening, auth] }
+    - { role: login_banners, tags: [login_banners, auth] }
 
-    - role: kernel_unused_fs_disable
-      tags: [kernel_unused_fs_disable, os_baseline]
+    # Files and accounts
+    - { role: sensitive_file_perms, tags: [sensitive_file_perms, filesystem] }
+    - { role: home_dir_perms, tags: [home_dir_perms, filesystem] }
+    - { role: suid_strip_nonessential, tags: [suid_strip_nonessential, filesystem] }
+    - { role: cron_at_restriction, tags: [cron_at_restriction, filesystem] }
+    - { role: service_account_hardening, tags: [service_account_hardening, filesystem] }
 
-    - role: sysctl_hardening
-      tags: [sysctl_hardening, os_baseline, sysctl]
+    # Network: firewall first, then fail2ban, then SSH itself
+    - { role: ufw_firewall, tags: [ufw_firewall, network] }
+    - { role: fail2ban, tags: [fail2ban, network] }
+    - { role: ssh_hardening, tags: [ssh_hardening, network, ssh] }
 
-    - role: ipv6_disable
-      tags: [ipv6_disable, os_baseline]
+    # Logging and auditing
+    - { role: rsyslog_hardening, tags: [rsyslog_hardening, logging] }
+    - { role: journald_hardening, tags: [journald_hardening, logging] }
+    - { role: auditd_rules, tags: [auditd_rules, logging] }
+    - { role: log_file_perms, tags: [log_file_perms, logging] }
 
-    - role: tmp_devshm_hardening
-      tags: [tmp_devshm_hardening, os_baseline]
-
-    - role: coredump_disable
-      tags: [coredump_disable, os_baseline]
-
-    - role: shell_tmout
-      tags: [shell_tmout, os_baseline]
-
-    # Authentication & Access Control
-    - role: root_lockout
-      tags: [root_lockout, auth]
-
-    - role: pam_pwquality
-      tags: [pam_pwquality, auth, pam]
-
-    - role: pam_faillock
-      tags: [pam_faillock, auth, pam]
-
-    - role: password_aging
-      tags: [password_aging, auth]
-
-    - role: pam_pwhistory
-      tags: [pam_pwhistory, auth, pam]
-
-    - role: sudo_hardening
-      tags: [sudo_hardening, auth, sudo]
-
-    - role: ssh_hardening
-      tags: [ssh_hardening, auth, ssh]
-
-    - role: ssh_hostkey_hardening
-      tags: [ssh_hostkey_hardening, auth, ssh]
-
-    - role: login_banners
-      tags: [login_banners, auth]
-
-    # Filesystem & Permissions
-    - role: sensitive_file_perms
-      tags: [sensitive_file_perms, filesystem]
-
-    - role: home_dir_perms
-      tags: [home_dir_perms, filesystem]
-
-    - role: umask_hardening
-      tags: [umask_hardening, filesystem]
-
-    - role: world_writable_scan
-      tags: [world_writable_scan, filesystem]
-
-    - role: suid_sgid_audit
-      tags: [suid_sgid_audit, filesystem]
-
-    - role: unowned_file_scan
-      tags: [unowned_file_scan, filesystem]
-
-    - role: chattr_immutable_configs
-      tags: [chattr_immutable_configs, filesystem]
-
-    - role: chattr_append_logs
-      tags: [chattr_append_logs, filesystem]
-
-    # Network Security & Firewall
-    - role: network_exposure_audit
-      tags: [network_exposure_audit, network]
-
-    - role: ufw_default_policy
-      tags: [ufw_default_policy, network, ufw]
-
-    - role: ufw_ssh_restriction
-      tags: [ufw_ssh_restriction, network, ufw]
-
-    - role: ufw_allowed_services
-      tags: [ufw_allowed_services, network, ufw]
-
-    - role: ufw_rate_limit_ssh
-      tags: [ufw_rate_limit_ssh, network, ufw]
-
-    - role: ufw_logging
-      tags: [ufw_logging, network, ufw]
-
-    - role: fail2ban_ssh_jail
-      tags: [fail2ban_ssh_jail, network, fail2ban]
-
-    - role: fail2ban_sudo_jail
-      tags: [fail2ban_sudo_jail, network, fail2ban]
-
-    - role: auditd_rules
-      tags: [auditd_rules, network, auditd]
-
-    # Services & Additional Hardening
-    - role: cron_at_restriction
-      tags: [cron_at_restriction, additional]
-
-    - role: log_file_perms
-      tags: [log_file_perms, additional]
-
-    - role: rsyslog_hardening
-      tags: [rsyslog_hardening, additional]
-
-    - role: journald_hardening
-      tags: [journald_hardening, additional]
-
-    - role: service_account_hardening
-      tags: [service_account_hardening, additional]
-
-    - role: debsums_verification
-      tags: [debsums_verification, additional]
-
-    - role: suid_strip_nonessential
-      tags: [suid_strip_nonessential, additional]
-
-    - role: systemd_service_hardening
-      tags: [systemd_service_hardening, additional]
-
-    - role: capability_audit
-      tags: [capability_audit, additional]
-
-    - role: issue_content
-      tags: [issue_content, additional]
-
-    - role: dns_resolver_hardening
-      tags: [dns_resolver_hardening, additional]
-
-    - role: ntp_hardening
-      tags: [ntp_hardening, additional]
-
-    - role: compiler_restriction
-      tags: [compiler_restriction, additional]
-
-    - role: boot_perms
-      tags: [boot_perms, additional]
+    # Last: noexec /tmp must not interfere with package installs above; AIDE baselines the finished state
+    - { role: tmp_devshm_hardening, tags: [tmp_devshm_hardening, os_baseline] }
+    - { role: aide_baseline, tags: [aide_baseline, logging] }

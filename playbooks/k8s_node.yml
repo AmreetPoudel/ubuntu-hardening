@@ -1,8 +1,14 @@
 ---
-- name: Kubernetes Node & Kubelet Security Hardening Playbook
+- name: Kubernetes node hardening
   hosts: k8s_nodes
   become: true
+  gather_facts: true
+  # One node at a time by default: draining more than one node at once is rarely safe.
+  serial: "{{ hardening_k8s_serial | default(1) }}"
+  max_fail_percentage: 0
+  # A failed task must not discard handlers already notified (reloads/restarts of changed config).
+  force_handlers: true
 
   roles:
-    - role: k8s_node_hardening
-      tags: [k8s_node, k8s, kubelet]
+    - { role: preflight, tags: [always] }
+    - { role: k8s_node_hardening, tags: [k8s_node_hardening, k8s] }

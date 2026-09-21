@@ -1,0 +1,10 @@
+---
+# Read-only, potentially slow on large filesystems: SUID/SGID files, world-writable and unowned files,
+# capabilities, modified package files, listening sockets. Results go to reports/scan-<timestamp>.json.
+- name: Security scan
+  hosts: standalone:docker_nodes:k8s_nodes:db_nodes:web_nodes
+  become: true
+  gather_facts: true
+
+  roles:
+    - { role: security_scan, tags: [scan] }

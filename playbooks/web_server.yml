@@ -1,8 +1,13 @@
 ---
-- name: Web Server Security Hardening Playbook
+- name: Web server hardening
   hosts: web_nodes
   become: true
+  gather_facts: true
+  serial: "{{ hardening_serial | default('25%') }}"
+  max_fail_percentage: 0
+  # A failed task must not discard handlers already notified (reloads/restarts of changed config).
+  force_handlers: true
 
   roles:
-    - role: nginx_hardening
-      tags: [nginx, webserver]
+    - { role: preflight, tags: [always] }
+    - { role: nginx_hardening, tags: [nginx_hardening, nginx, webserver] }

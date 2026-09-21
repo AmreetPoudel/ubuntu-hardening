@@ -1,8 +1,13 @@
 ---
-- name: Docker Host Security & Container Engine Hardening Playbook
+- name: Docker host hardening
   hosts: docker_nodes
   become: true
+  gather_facts: true
+  serial: "{{ hardening_serial | default('25%') }}"
+  max_fail_percentage: 0
+  # A failed task must not discard handlers already notified (reloads/restarts of changed config).
+  force_handlers: true
 
   roles:
-    - role: docker_daemon_hardening
-      tags: [docker_daemon, docker]
+    - { role: preflight, tags: [always] }
+    - { role: docker_daemon_hardening, tags: [docker_daemon_hardening, docker] }

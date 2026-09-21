@@ -1,8 +1,13 @@
 ---
-- name: Database Server Security Hardening Playbook
+- name: Database server hardening
   hosts: db_nodes
   become: true
+  gather_facts: true
+  serial: "{{ hardening_serial | default('25%') }}"
+  max_fail_percentage: 0
+  # A failed task must not discard handlers already notified (reloads/restarts of changed config).
+  force_handlers: true
 
   roles:
-    - role: postgres_hardening
-      tags: [postgres, database]
+    - { role: preflight, tags: [always] }
+    - { role: postgres_hardening, tags: [postgres_hardening, postgres, database] }

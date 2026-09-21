@@ -1,21 +1,20 @@
 ---
-# Master Hardening Framework Orchestrator Playbook
-# Sequentially imports base OS and technology-specific hardening playbooks
+# Full run: harden the base OS, apply workload-specific hardening, then audit the result.
+# Every step can also be run on its own (see playbooks/ and the README).
+- name: Base OS hardening
+  ansible.builtin.import_playbook: playbooks/base_os.yml
 
-- name: Apply Base OS System Hardening
-  import_playbook: playbooks/base_os.yml
+- name: Docker host hardening
+  ansible.builtin.import_playbook: playbooks/docker_host.yml
 
-- name: Apply Docker Host Container Security
-  import_playbook: playbooks/docker_host.yml
+- name: Kubernetes node hardening
+  ansible.builtin.import_playbook: playbooks/k8s_node.yml
 
-- name: Apply Kubernetes Node Security
-  import_playbook: playbooks/k8s_node.yml
+- name: Database server hardening
+  ansible.builtin.import_playbook: playbooks/database_server.yml
 
-- name: Apply Database Server Security
-  import_playbook: playbooks/database_server.yml
+- name: Web server hardening
+  ansible.builtin.import_playbook: playbooks/web_server.yml
 
-- name: Apply Web Server Security
-  import_playbook: playbooks/web_server.yml
-
-- name: Generate Post-Hardening Compliance Audit Reports
-  import_playbook: playbooks/audit_compliance.yml
+- name: Compliance audit
+  ansible.builtin.import_playbook: playbooks/audit_compliance.yml
