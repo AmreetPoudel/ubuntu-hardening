@@ -1,0 +1,5 @@
+---
+# Web servers: the public HTTP(S) ports must stay open once the default-deny firewall is on.
+ufw_rules_extra:
+  - { port: 80, proto: tcp, comment: "HTTP" }
+  - { port: 443, proto: tcp, comment: "HTTPS" }

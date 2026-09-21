@@ -1,58 +1,370 @@
 ---
-# Global Hardening Baseline Variables — Shared across all target nodes
+# =====================================================================================================
+# Hardening policy - the ONE place to tune this framework.
+#
+# Every role reads its settings from here, and the audit compares hosts against these same values.
+# Workload differences live in group_vars/<group>.yml, which override anything below for that group.
+# Only override what you must: the defaults are the secure baseline.
+# =====================================================================================================
 
-# Reporting & Audit
-hardening_log_dir: "/var/log/ansible-hardening"
-hardening_report_file: "/var/log/ansible-hardening/run-summary.log"
+# --- Safety & rollout ----------------------------------------------------------------------------------
+hardening_allow_unsupported_os: false
+# Rollout size is not set here: Ansible evaluates `serial` before inventory variables exist. Pass it on the
+# command line instead, e.g. -e hardening_serial=1 (default 25%; Kubernetes nodes default to 1, -e hardening_k8s_serial).
+# A failure on any host stops the rollout before the next batch (max_fail_percentage: 0 in the playbooks).
 
-# Kernel & System Performance
-sysctl_ip_forward: 0
-sysctl_accept_source_route: 0
-sysctl_accept_redirects: 0
-sysctl_send_redirects: 0
-sysctl_icmp_echo_ignore_broadcasts: 1
-sysctl_rp_filter: 1
-sysctl_log_martians: 1
-sysctl_tcp_syncookies: 1
-disable_ipv6: false
+# Management network(s) (CIDRs). When set: SSH is firewalled to these sources, fail2ban never bans them.
+# Leave empty to allow SSH from anywhere.
+hardening_mgmt_cidrs: []
 
-# Mount Hardening
-tmp_mount_options: "defaults,rw,nosuid,nodev,noexec"
-var_tmp_mount_options: "defaults,rw,nosuid,nodev,noexec"
-dev_shm_mount_options: "defaults,rw,nosuid,nodev,noexec"
-
-# SSH Service Parameters
+# --- SSH ------------------------------------------------------------------------------------------------
 ssh_port: 22
+# Changing the port also requires ansible_port in the inventory; the play refuses otherwise.
+ssh_allow_port_change: false
 ssh_permit_root_login: "no"
-ssh_password_authentication: "no"
-ssh_max_auth_tries: 3
+# TODO(hardening): password login stays on for now because the inventory authenticates with a password.
+# Move to keys ("no") later. The play refuses to set "no" unless the connection user has an authorized key
+# or ssh_password_auth_allowed_from lists a management network.
+ssh_password_authentication: "yes"
+ssh_password_auth_allowed_from: "{{ hardening_mgmt_cidrs }}"
+ssh_max_auth_tries: 4
+ssh_max_sessions: 10
+ssh_login_grace_time: 60
 ssh_client_alive_interval: 300
 ssh_client_alive_count_max: 2
+ssh_allow_tcp_forwarding: "no"
+ssh_allow_agent_forwarding: "no"
+ssh_log_level: VERBOSE
+# Optional allow-lists. When set they must include the connection user (checked before applying).
+ssh_allow_users: []
+ssh_allow_groups: []
+ssh_hostkey_files:
+  - /etc/ssh/ssh_host_ed25519_key
+  - /etc/ssh/ssh_host_rsa_key
+ssh_ciphers:
+  - chacha20-poly1305@openssh.com
+  - aes256-gcm@openssh.com
+  - aes128-gcm@openssh.com
+  - aes256-ctr
+  - aes192-ctr
+  - aes128-ctr
+ssh_kex_algorithms:
+  - sntrup761x25519-sha512@openssh.com
+  - curve25519-sha256
+  - curve25519-sha256@libssh.org
+  - diffie-hellman-group16-sha512
+  - diffie-hellman-group18-sha512
+ssh_macs:
+  - hmac-sha2-512-etm@openssh.com
+  - hmac-sha2-256-etm@openssh.com
+  - umac-128-etm@openssh.com
 
-# Authentication & PAM
-pam_password_min_len: 14
-pam_password_min_classes: 4
+# --- Accounts, passwords, PAM ----------------------------------------------------------------------------
+lock_root_account: true
+
+pam_pwquality_minlen: 14
+pam_pwquality_minclass: 4
+pam_pwquality_maxrepeat: 3
+
+pam_faillock_enabled: true
 pam_faillock_deny: 5
+pam_faillock_fail_interval: 900
 pam_faillock_unlock_time: 900
+pam_faillock_even_deny_root: false
+
+pam_pwhistory_enabled: true
+pam_pwhistory_remember: 5
+
 password_max_days: 90
 password_min_days: 7
 password_warn_age: 14
+# Also apply aging to existing accounts. Off by default: it can expire passwords that are already old.
+# The connection user is always excluded.
+password_aging_apply_existing: false
+password_aging_exclude_users: []
 
-# Network Security & UFW
-ufw_enable: true
-ufw_default_input_policy: "deny"
-ufw_default_output_policy: "allow"
-ufw_default_forward_policy: "deny"
-ufw_allow_ssh_ports:
-  - 22
+sudo_logfile: /var/log/sudo.log
+sudo_timestamp_timeout: 15
 
-# Monitoring & Observability Allowances (node_exporter & promtail)
-ufw_allowed_ports:
-  - "9100"  # Prometheus node_exporter
+shell_idle_timeout: 900
+system_umask: "027"
 
-# System Services
-proc_hidepid_level: 2
-chrony_servers:
-  - "0.ubuntu.pool.ntp.org"
-  - "1.ubuntu.pool.ntp.org"
-  - "2.ubuntu.pool.ntp.org"
+login_banner_text: |
+  *******************************************************************************
+  *                                                                             *
+  * NOTICE TO USERS: Unauthorized access or use of this system is prohibited.   *
+  * All activity on this system is monitored and logged for security purposes.  *
+  *                                                                             *
+  *******************************************************************************
+
+# --- Packages & updates ----------------------------------------------------------------------------------
+legacy_packages:
+  - telnet
+  - inetutils-telnet
+  - inetutils-telnetd
+  - telnetd
+  - rsh-client
+  - rsh-server
+  - talk
+  - talkd
+  - tftpd-hpa
+  - xinetd
+  - nis
+
+hardening_tools_packages:
+  - auditd
+  - debsums
+  - fail2ban
+  - python3-systemd
+  - ufw
+  - libpam-pwquality
+  - libcap2-bin
+  - apparmor
+  - apparmor-utils
+  - rsyslog
+
+unattended_upgrades_enabled: true
+unattended_upgrades_auto_reboot: false
+unattended_upgrades_blacklist: []
+
+# --- Kernel ----------------------------------------------------------------------------------------------
+# Unused network protocols and filesystems. udf is required to provision some cloud images
+# (e.g. Azure); remove it via kernel_blacklist_exclude there.
+kernel_blacklist_modules:
+  - dccp
+  - sctp
+  - rds
+  - tipc
+  - cramfs
+  - freevxfs
+  - jffs2
+  - hfs
+  - hfsplus
+  - udf
+kernel_blacklist_exclude: []
+
+sysctl_disable_ipv6: false
+sysctl_settings:
+  net.ipv4.ip_forward: 0
+  net.ipv4.conf.all.accept_source_route: 0
+  net.ipv4.conf.default.accept_source_route: 0
+  net.ipv4.conf.all.accept_redirects: 0
+  net.ipv4.conf.default.accept_redirects: 0
+  net.ipv4.conf.all.secure_redirects: 0
+  net.ipv4.conf.default.secure_redirects: 0
+  net.ipv4.conf.all.send_redirects: 0
+  net.ipv4.conf.default.send_redirects: 0
+  net.ipv4.icmp_echo_ignore_broadcasts: 1
+  net.ipv4.icmp_ignore_bogus_error_responses: 1
+  net.ipv4.conf.all.rp_filter: 1
+  net.ipv4.conf.default.rp_filter: 1
+  net.ipv4.conf.all.log_martians: 1
+  net.ipv4.conf.default.log_martians: 1
+  net.ipv4.tcp_syncookies: 1
+  net.ipv4.tcp_rfc1337: 1
+  net.ipv6.conf.all.accept_ra: 0
+  net.ipv6.conf.default.accept_ra: 0
+  net.ipv6.conf.all.accept_redirects: 0
+  net.ipv6.conf.default.accept_redirects: 0
+  net.ipv6.conf.all.accept_source_route: 0
+  net.ipv6.conf.default.accept_source_route: 0
+  net.ipv6.conf.all.disable_ipv6: "{{ 1 if sysctl_disable_ipv6 | bool else 0 }}"
+  net.ipv6.conf.default.disable_ipv6: "{{ 1 if sysctl_disable_ipv6 | bool else 0 }}"
+  kernel.randomize_va_space: 2
+  kernel.yama.ptrace_scope: 1
+  kernel.kptr_restrict: 2
+  kernel.dmesg_restrict: 1
+  kernel.sysrq: 0
+  kernel.unprivileged_bpf_disabled: 1
+  net.core.bpf_jit_harden: 2
+  fs.suid_dumpable: 0
+  fs.protected_hardlinks: 1
+  fs.protected_symlinks: 1
+  fs.protected_fifos: 2
+  fs.protected_regular: 2
+# Per-key changes for a group or host (merged over sysctl_settings), e.g. { net.ipv4.ip_forward: 1 }.
+sysctl_overrides: {}
+
+# /tmp and /dev/shm. /tmp becomes tmpfs via fstab (active from next boot unless it is already a mount).
+tmp_mount_manage: true
+tmp_mount_options: "nosuid,nodev,noexec"
+tmp_tmpfs_size: ""
+dev_shm_mount_options: "nosuid,nodev,noexec"
+
+# --- Services --------------------------------------------------------------------------------------------
+# Only units that exist on the host are touched. Add or remove entries to match what you really run.
+services_disable_units:
+  - avahi-daemon.service
+  - avahi-daemon.socket
+  - cups.service
+  - cups.socket
+  - cups.path
+  - cups-browsed.service
+  - isc-dhcp-server.service
+  - isc-dhcp-server6.service
+  - slapd.service
+  - snmpd.service
+  - vsftpd.service
+  - smbd.service
+  - nmbd.service
+  - dovecot.service
+  - squid.service
+
+apparmor_enforce_enabled: true
+
+# Empty = keep the distribution defaults (Ubuntu pool).
+chrony_servers: []
+chrony_disable_cmdport: true
+
+dns_resolver_manage: true
+dns_sec_setting: allow-downgrade
+dns_over_tls: opportunistic
+
+cron_allowed_users:
+  - root
+
+service_account_shell_exclude:
+  - root
+  - sync
+  - shutdown
+  - halt
+  - postgres
+
+# --- Filesystem permissions ---------------------------------------------------------------------------------
+sensitive_files:
+  - { path: /etc/passwd, mode: "0644" }
+  - { path: /etc/passwd-, mode: "0644" }
+  - { path: /etc/group, mode: "0644" }
+  - { path: /etc/group-, mode: "0644" }
+  - { path: /etc/shadow, mode: "0640", group: shadow }
+  - { path: /etc/shadow-, mode: "0640", group: shadow }
+  - { path: /etc/gshadow, mode: "0640", group: shadow }
+  - { path: /etc/gshadow-, mode: "0640", group: shadow }
+  - { path: /etc/crontab, mode: "0600" }
+  - { path: /etc/cron.hourly, mode: "0700", state: directory }
+  - { path: /etc/cron.daily, mode: "0700", state: directory }
+  - { path: /etc/cron.weekly, mode: "0700", state: directory }
+  - { path: /etc/cron.monthly, mode: "0700", state: directory }
+  - { path: /etc/cron.d, mode: "0700", state: directory }
+  - { path: /etc/ssh/sshd_config, mode: "0600" }
+  - { path: /etc/issue, mode: "0644" }
+  - { path: /etc/issue.net, mode: "0644" }
+  - { path: /boot/grub/grub.cfg, mode: "0600" }
+
+home_dir_mode: "0750"
+home_dir_exclude_users: []
+
+# SUID/SGID bits removed with dpkg-statoverride so package upgrades do not restore them.
+suid_strip_binaries:
+  - /usr/bin/chfn
+  - /usr/bin/chsh
+  - /usr/bin/gpasswd
+  - /usr/bin/newgrp
+
+# Log files that legitimately need group/other access (patterns on the file name).
+log_perms_exclude:
+  - wtmp
+  - btmp
+  - lastlog
+  - faillog
+  - README
+
+# --- Firewall (UFW) -----------------------------------------------------------------------------------------
+ufw_log_level: low
+ufw_default_incoming: deny
+ufw_default_outgoing: allow
+ufw_default_routed: deny
+# After moving SSH to another port (and switching ansible_port), list the old port(s) here to close them.
+ufw_ssh_previous_ports: []
+# `limit` = allow, but throttle a source that opens 6+ connections in 30s.
+ufw_ssh_rate_limit: true
+# Sources allowed to scrape metrics (e.g. Prometheus node_exporter). Empty = port stays closed.
+ufw_monitoring_cidrs: []
+ufw_monitoring_port: 9100
+# Rules every host gets, and per-group additions. Item: {port, proto, src, interface, direction, rule, comment}.
+ufw_rules: []
+ufw_rules_extra: []
+
+fail2ban_bantime: 1h
+fail2ban_findtime: 10m
+fail2ban_maxretry: 5
+
+# --- Logging & auditing -------------------------------------------------------------------------------------
+auditd_backlog_limit: 8192
+auditd_max_log_file: 50
+auditd_num_logs: 10
+# Never halt the machine because audit logs are full.
+auditd_space_left_action: syslog
+auditd_admin_space_left_action: suspend
+# -e 2: rules cannot change until reboot (also blocks re-running this role). Enable only for final lock-down.
+auditd_immutable: false
+
+rsyslog_file_create_mode: "0640"
+
+journald_storage: persistent
+journald_compress: "yes"
+journald_forward_to_syslog: "yes"
+journald_system_max_use: ""
+
+# File integrity monitoring. Building the baseline takes minutes; enable per environment.
+aide_enabled: false
+aide_init_timeout: 3600
+
+# --- Workloads (applied only by their own playbooks, and only when the software is installed) ---------------
+docker_daemon_settings:
+  icc: false
+  no-new-privileges: true
+  userland-proxy: false
+  live-restore: true
+  log-driver: journald
+docker_daemon_overrides: {}
+# Restarting Docker stops containers unless live-restore is already active. Off = change applies at next restart.
+docker_allow_restart: false
+
+k8s_manage_kernel_modules: true
+k8s_disable_swap: true
+k8s_config_files:
+  - /var/lib/kubelet/config.yaml
+  - /etc/kubernetes/kubelet.conf
+  - /etc/kubernetes/admin.conf
+  - /etc/kubernetes/scheduler.conf
+  - /etc/kubernetes/controller-manager.conf
+
+postgres_ssl: "on"
+postgres_ssl_min_protocol_version: TLSv1.2
+postgres_password_encryption: scram-sha-256
+postgres_log_connections: "on"
+postgres_log_disconnections: "on"
+postgres_log_line_prefix: "%m [%p] %q%u@%d "
+# Empty = leave listen_addresses as configured. Changing it needs a restart (see postgres_allow_restart).
+postgres_listen_addresses: ""
+postgres_allow_restart: false
+# Networks allowed to reach PostgreSQL through the firewall (db_nodes group). Empty = port stays closed.
+postgres_allowed_sources: []
+
+nginx_server_tokens: "off"
+nginx_ssl_protocols: "TLSv1.2 TLSv1.3"
+nginx_security_headers:
+  X-Content-Type-Options: nosniff
+  X-Frame-Options: SAMEORIGIN
+  Referrer-Policy: strict-origin-when-cross-origin
+# HSTS is sticky in browsers, so it is opt-in.
+nginx_hsts_enabled: false
+nginx_hsts_max_age: 31536000
+nginx_hsts_include_subdomains: false
+
+# --- Audit & scan reports (written on the control node) ----------------------------------------------------
+audit_report_dir: "{{ inventory_dir }}/reports"
+audit_generate_html: true
+audit_generate_json: true
+# Fail the run when a host scores below this percentage (0 = never fail).
+audit_min_score: 0
+security_scan_timeout: 1800
+security_scan_prune_paths:
+  - /var/lib/docker
+  - /var/lib/containerd
+  - /var/lib/kubelet
+  - /var/lib/lxcfs
+  - /snap
+  - /proc
+  - /sys

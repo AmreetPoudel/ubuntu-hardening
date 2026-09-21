@@ -1,0 +1,15 @@
+---
+# Database servers. PostgreSQL is only reachable from the networks listed in postgres_allowed_sources
+# (set it in group_vars/all.yml or here), e.g. ["10.0.0.0/24"]; empty keeps port 5432 closed.
+
+ufw_rules_extra: >-
+  {% set r = [] -%}
+  {% for cidr in postgres_allowed_sources -%}
+  {% set _ = r.append({'port': 5432, 'proto': 'tcp', 'src': cidr, 'comment': 'PostgreSQL'}) -%}
+  {% endfor -%}
+  {{ r }}
+
+# Database packages are upgraded in a planned window, not automatically.
+unattended_upgrades_blacklist:
+  - "postgresql"
+  - "postgresql-.*"

@@ -1,21 +1,54 @@
 ---
-# Workload Overrides for Kubernetes Controlplane and Worker Nodes
-# Preserves CNI plugin networking, kubelet, etcd, and pod overlay bridges
+# Kubernetes nodes: keep the CNI, kube-proxy and kubelet working.
+#
+# Optional inventory group `k8s_control_plane`: hosts in it also open the API server / etcd / scheduler ports.
+# Without that group every k8s node is treated as a control-plane node (the safe, nothing-breaks default).
 
-sysctl_ip_forward: 1
-sysctl_bridge_nf_call_iptables: 1
-proc_hidepid_level: 0
-tmp_mount_options: "defaults,rw,nosuid,nodev"
-ufw_default_forward_policy: "accept"
+sysctl_overrides:
+  net.ipv4.ip_forward: 1
+  # Loose reverse-path filtering: strict mode drops legitimate asymmetric pod traffic on most CNIs.
+  net.ipv4.conf.all.rp_filter: 2
+  net.ipv4.conf.default.rp_filter: 2
 
-# Essential Kubernetes ports (Kube-API, Kubelet, Etcd, Flannel/Calico CNI)
-ufw_allow_k8s_ports:
-  - 6443/tcp   # Kubernetes API Server
-  - 2379/tcp   # etcd client requests
-  - 2380/tcp   # etcd peer communication
-  - 10250/tcp  # Kubelet API
-  - 10259/tcp  # kube-scheduler
-  - 10257/tcp  # kube-controller-manager
-  - 30000:32767/tcp # NodePort Services
-  - 8472/udp   # Flannel VXLAN overlay
-  - 4789/udp   # Calico VXLAN
+tmp_mount_options: "nosuid,nodev"
+kernel_blacklist_exclude:
+  - sctp
+ufw_default_routed: allow
+
+unattended_upgrades_blacklist:
+  - kubelet
+  - kubeadm
+  - kubectl
+  - containerd
+  - containerd.io
+
+# Restrict cluster ports to your node/pod networks by setting this to a CIDR (e.g. 10.0.0.0/8).
+k8s_cluster_cidr: any
+# Interfaces of your CNI; traffic arriving on them (pod -> node) must not be dropped by the default-deny policy.
+k8s_cni_interfaces:
+  - cni0
+  - flannel.1
+  - vxlan.calico
+  - cilium_host
+  - cilium_net
+
+k8s_is_control_plane: "{{ inventory_hostname in groups['k8s_control_plane'] if 'k8s_control_plane' in groups else true }}"
+
+k8s_node_rules:
+  - { port: 10250, proto: tcp, src: "{{ k8s_cluster_cidr }}", comment: "kubelet API" }
+  - { port: "30000:32767", proto: tcp, comment: "NodePort services" }
+  - { port: 8472, proto: udp, src: "{{ k8s_cluster_cidr }}", comment: "Flannel VXLAN" }
+  - { port: 4789, proto: udp, src: "{{ k8s_cluster_cidr }}", comment: "Calico VXLAN" }
+k8s_control_plane_rules:
+  - { port: 6443, proto: tcp, comment: "Kubernetes API server" }
+  - { port: "2379:2380", proto: tcp, src: "{{ k8s_cluster_cidr }}", comment: "etcd" }
+  - { port: 10257, proto: tcp, src: "{{ k8s_cluster_cidr }}", comment: "kube-controller-manager" }
+  - { port: 10259, proto: tcp, src: "{{ k8s_cluster_cidr }}", comment: "kube-scheduler" }
+k8s_cni_interface_rules: >-
+  {% set r = [] -%}
+  {% for iface in k8s_cni_interfaces -%}
+  {% set _ = r.append({'interface': iface, 'proto': 'any', 'comment': 'CNI ' ~ iface}) -%}
+  {% endfor -%}
+  {{ r }}
+
+ufw_rules_extra: "{{ k8s_node_rules + (k8s_control_plane_rules if k8s_is_control_plane | bool else []) + k8s_cni_interface_rules }}"
