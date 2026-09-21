@@ -1,0 +1,6 @@
+Name: Hardening - prevent reuse of recent passwords
+Default: yes
+Priority: 512
+Password-Type: Primary
+Password:
+	requisite	pam_pwhistory.so remember={{ pam_pwhistory_remember }} use_authtok enforce_for_root

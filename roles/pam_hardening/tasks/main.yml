@@ -1,0 +1,127 @@
+---
+# --- Password quality -------------------------------------------------------
+- name: Ensure the pwquality drop-in directory exists
+  ansible.builtin.file:
+    path: /etc/security/pwquality.conf.d
+    state: directory
+    owner: root
+    group: root
+    mode: "0755"
+
+- name: Configure password quality requirements
+  ansible.builtin.copy:
+    dest: /etc/security/pwquality.conf.d/hardening.conf
+    content: |
+      # Managed by Ansible (linux-hardening)
+      minlen = {{ pam_pwquality_minlen }}
+      minclass = {{ pam_pwquality_minclass }}
+      maxrepeat = {{ pam_pwquality_maxrepeat }}
+      dictcheck = 1
+      usercheck = 1
+      enforcing = 1
+    owner: root
+    group: root
+    mode: "0644"
+
+# --- Account lockout thresholds --------------------------------------------
+- name: Configure faillock thresholds
+  ansible.builtin.lineinfile:
+    path: /etc/security/faillock.conf
+    regexp: '^\s*#?\s*{{ item.key }}\s*='
+    line: "{{ item.key }} = {{ item.value }}"
+    backup: true
+  loop:
+    - { key: deny, value: "{{ pam_faillock_deny }}" }
+    - { key: fail_interval, value: "{{ pam_faillock_fail_interval }}" }
+    - { key: unlock_time, value: "{{ pam_faillock_unlock_time }}" }
+  when: pam_faillock_enabled | bool
+
+- name: Configure whether root is subject to lockout
+  ansible.builtin.lineinfile:
+    path: /etc/security/faillock.conf
+    regexp: '^\s*#?\s*even_deny_root\b'
+    line: even_deny_root
+    state: "{{ 'present' if pam_faillock_even_deny_root | bool else 'absent' }}"
+  when: pam_faillock_enabled | bool
+
+# --- Password history -------------------------------------------------------
+- name: Ensure the password history file exists with safe permissions
+  ansible.builtin.copy:
+    dest: /etc/security/opasswd
+    content: ""
+    force: false
+    owner: root
+    group: root
+    mode: "0600"
+
+# --- Wire the modules into the PAM stack the supported way (pam-auth-update) -
+- name: Configure the PAM stack
+  block:
+    - name: Deploy PAM profiles for enabled controls
+      ansible.builtin.template:
+        src: "{{ item.src }}"
+        dest: "/usr/share/pam-configs/{{ item.name }}"
+        owner: root
+        group: root
+        mode: "0644"
+      loop: &pam_profiles
+        - { name: hardening-faillock, src: faillock.j2, enabled: "{{ pam_faillock_enabled }}" }
+        - { name: hardening-faillock-notify, src: faillock_notify.j2, enabled: "{{ pam_faillock_enabled }}" }
+        - { name: hardening-pwhistory, src: pwhistory.j2, enabled: "{{ pam_pwhistory_enabled }}" }
+      loop_control:
+        label: "{{ item.name }}"
+      when: item.enabled | bool
+      register: pam_hardening_deployed
+
+    - name: Remove PAM profiles for disabled controls
+      ansible.builtin.file:
+        path: "/usr/share/pam-configs/{{ item.name }}"
+        state: absent
+      loop: *pam_profiles
+      loop_control:
+        label: "{{ item.name }}"
+      when: not item.enabled | bool
+      register: pam_hardening_removed
+
+    - name: Rebuild the PAM configuration
+      ansible.builtin.command: pam-auth-update --package
+      environment:
+        DEBIAN_FRONTEND: noninteractive
+      changed_when: true
+      when: pam_hardening_deployed.changed or pam_hardening_removed.changed
+
+    - name: Verify the PAM stack contains what it should and still authenticates via pam_unix
+      ansible.builtin.command: "grep -Eq '{{ item.pattern }}' {{ item.file }}"
+      loop:
+        - { file: /etc/pam.d/common-auth, pattern: 'pam_unix\.so', enabled: true }
+        - { file: /etc/pam.d/common-password, pattern: 'pam_unix\.so', enabled: true }
+        - { file: /etc/pam.d/common-auth, pattern: 'pam_faillock\.so.*preauth', enabled: "{{ pam_faillock_enabled }}" }
+        - { file: /etc/pam.d/common-auth, pattern: 'pam_faillock\.so.*authfail', enabled: "{{ pam_faillock_enabled }}" }
+        - { file: /etc/pam.d/common-account, pattern: 'pam_faillock\.so', enabled: "{{ pam_faillock_enabled }}" }
+        - { file: /etc/pam.d/common-password, pattern: 'pam_pwhistory\.so', enabled: "{{ pam_pwhistory_enabled }}" }
+      loop_control:
+        label: "{{ item.file }}: {{ item.pattern }}"
+      when: item.enabled | bool
+      changed_when: false
+      check_mode: false
+
+  rescue:
+    - name: Roll back the PAM profiles
+      ansible.builtin.file:
+        path: "/usr/share/pam-configs/{{ item.name }}"
+        state: absent
+      loop: *pam_profiles
+      loop_control:
+        label: "{{ item.name }}"
+
+    - name: Rebuild the PAM configuration without the new profiles
+      ansible.builtin.command: pam-auth-update --package
+      environment:
+        DEBIAN_FRONTEND: noninteractive
+      changed_when: true
+
+    - name: Stop, the PAM stack did not come out as expected
+      ansible.builtin.fail:
+        msg: >-
+          PAM changes on {{ inventory_hostname }} were rolled back because the resulting stack failed verification.
+          Inspect /etc/pam.d/common-* (a manually edited file blocks pam-auth-update) and re-run.

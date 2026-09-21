@@ -1,0 +1,53 @@
+# Managed by Ansible (linux-hardening) - local changes will be overwritten.
+# Named 00- so it is read before other drop-ins (e.g. 50-cloud-init.conf): sshd keeps the FIRST value it finds.
+
+Port {{ ssh_port }}
+{% for key in ssh_hostkey_files %}
+HostKey {{ key }}
+{% endfor %}
+
+# Authentication
+PermitRootLogin {{ ssh_permit_root_login }}
+PasswordAuthentication {{ ssh_password_authentication }}
+PubkeyAuthentication yes
+KbdInteractiveAuthentication no
+PermitEmptyPasswords no
+HostbasedAuthentication no
+IgnoreRhosts yes
+UsePAM yes
+MaxAuthTries {{ ssh_max_auth_tries }}
+MaxSessions {{ ssh_max_sessions }}
+LoginGraceTime {{ ssh_login_grace_time }}
+
+# Session
+ClientAliveInterval {{ ssh_client_alive_interval }}
+ClientAliveCountMax {{ ssh_client_alive_count_max }}
+PermitUserEnvironment no
+LogLevel {{ ssh_log_level }}
+Banner /etc/issue.net
+
+# Forwarding
+X11Forwarding no
+AllowTcpForwarding {{ ssh_allow_tcp_forwarding }}
+AllowAgentForwarding {{ ssh_allow_agent_forwarding }}
+GatewayPorts no
+PermitTunnel no
+
+# Cryptography
+Ciphers {{ ssh_ciphers | join(',') }}
+KexAlgorithms {{ ssh_kex_algorithms | join(',') }}
+MACs {{ ssh_macs | join(',') }}
+{% if ssh_allow_users | length > 0 %}
+
+AllowUsers {{ ssh_allow_users | join(' ') }}
+{% endif %}
+{% if ssh_allow_groups | length > 0 %}
+
+AllowGroups {{ ssh_allow_groups | join(' ') }}
+{% endif %}
+{% if ssh_password_authentication == 'no' and ssh_password_auth_allowed_from | length > 0 %}
+
+# Password login only from the management network(s)
+Match Address {{ ssh_password_auth_allowed_from | join(',') }}
+    PasswordAuthentication yes
+{% endif %}

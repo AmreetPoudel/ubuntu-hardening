@@ -1,0 +1,10 @@
+---
+# Runs only after the configuration changed: open a brand-new SSH login (not the multiplexed one that is
+# already established) so a configuration that would refuse us is noticed immediately.
+- name: Drop the multiplexed connection
+  ansible.builtin.meta: reset_connection
+
+- name: Wait for a new SSH login with the hardened configuration
+  ansible.builtin.wait_for_connection:
+    delay: 2
+    timeout: 60

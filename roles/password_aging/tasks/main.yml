@@ -1,26 +1,45 @@
 ---
-- name: Configure password expiration rules in login.defs
+- name: Set password aging defaults for new accounts
+  ansible.builtin.lineinfile:
+    path: /etc/login.defs
+    regexp: '^\s*{{ item.key }}\b'
+    line: "{{ item.key }}\t{{ item.value }}"
+    backup: true
+  loop:
+    - { key: PASS_MAX_DAYS, value: "{{ password_max_days }}" }
+    - { key: PASS_MIN_DAYS, value: "{{ password_min_days }}" }
+    - { key: PASS_WARN_AGE, value: "{{ password_warn_age }}" }
+
+# Applying a maximum age to existing accounts can expire a password that is already older than the limit and
+# force an immediate change at next login - including for the account Ansible uses. It is therefore opt-in,
+# and the connection user is always excluded.
+- name: Apply aging policy to existing local accounts
+  when: password_aging_apply_existing | bool
   block:
+    - name: Read local accounts
+      ansible.builtin.getent:
+        database: passwd
 
-    - name: Set PASS_MAX_DAYS
-      ansible.builtin.lineinfile:
-        path: /etc/login.defs
-        regexp: '^PASS_MAX_DAYS'
-        line: "PASS_MAX_DAYS\t{{ pass_max_days }}"
+    - name: Read local password aging data
+      ansible.builtin.getent:
+        database: shadow
 
-    - name: Set PASS_MIN_DAYS
-      ansible.builtin.lineinfile:
-        path: /etc/login.defs
-        regexp: '^PASS_MIN_DAYS'
-        line: "PASS_MIN_DAYS\t{{ pass_min_days }}"
+    - name: Select accounts that deviate from the policy
+      ansible.builtin.set_fact:
+        password_aging_targets: >-
+          {% set out = [] -%}
+          {% for name, pw in ansible_facts.getent_passwd.items() -%}
+          {% set sh = ansible_facts.getent_shadow.get(name) -%}
+          {% if 1000 <= pw[1] | int < 60000 and name != ansible_user and name not in password_aging_exclude_users
+                and sh and sh[0][:1] not in ['!', '*']
+                and ((sh[2] | int) != password_min_days | int or (sh[3] | int) != password_max_days | int
+                     or (sh[4] | int) != password_warn_age | int) -%}
+          {% set _ = out.append(name) -%}
+          {% endif -%}
+          {% endfor -%}
+          {{ out | to_json }}
 
-    - name: Set PASS_WARN_AGE
-      ansible.builtin.lineinfile:
-        path: /etc/login.defs
-        regexp: '^PASS_WARN_AGE'
-        line: "PASS_WARN_AGE\t{{ pass_warn_age }}"
-
-  rescue:
-    - name: Show failure message but keep going
-      ansible.builtin.debug:
-        msg: "WARNING: password_aging failed on {{ inventory_hostname }}, check manually."
+    - name: Apply aging policy
+      ansible.builtin.command: "chage -m {{ password_min_days }} -M {{ password_max_days }} -W {{ password_warn_age }} {{ item }}"
+      loop: "{{ password_aging_targets | from_json if password_aging_targets is string else password_aging_targets }}"
+      changed_when: true

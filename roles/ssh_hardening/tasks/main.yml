@@ -1,17 +1,129 @@
 ---
-- name: Harden SSH daemon configuration
-  block:
+# --- Lockout guards: refuse to apply a configuration that would cut off the connection user ----
+- name: Look up the connection user
+  ansible.builtin.getent:
+    database: passwd
+    key: "{{ ansible_user }}"
 
-    - name: Deploy hardened sshd_config drop-in file
-      ansible.builtin.template:
-        src: sshd_config.j2
-        dest: /etc/ssh/sshd_config.d/99-hardening.conf
-        owner: root
-        group: root
-        mode: '0600'
-      notify: restart sshd
+- name: Look for authorized SSH keys of the connection user
+  ansible.builtin.stat:
+    path: "{{ ansible_facts.getent_passwd[ansible_user][4] }}/.ssh/authorized_keys"
+  register: ssh_hardening_authkeys
 
-  rescue:
-    - name: Show failure message but keep going
-      ansible.builtin.debug:
-        msg: "WARNING: ssh_hardening failed on {{ inventory_hostname }}, check manually."
+- name: Refuse to disable password login when Ansible itself still needs it
+  ansible.builtin.assert:
+    that: >-
+      ssh_password_authentication == 'yes'
+      or ssh_password_auth_allowed_from | length > 0
+      or (ssh_hardening_authkeys.stat.exists and ssh_hardening_authkeys.stat.size > 0
+          and ansible_ssh_pass is not defined and ansible_password is not defined)
+    fail_msg: >-
+      Refusing to set PasswordAuthentication no on {{ inventory_hostname }}: Ansible would lock itself out.
+      To turn password login off, either (a) switch the inventory to key authentication (remove ansible_ssh_pass /
+      ansible_password) AND install a key in ~{{ ansible_user }}/.ssh/authorized_keys, or (b) list the network Ansible
+      connects from in ssh_password_auth_allowed_from / hardening_mgmt_cidrs so password login stays possible from there.
+    quiet: true
+
+- name: Refuse an allow-list that excludes the connection user
+  ansible.builtin.assert:
+    that: ssh_allow_users | length == 0 or ansible_user in ssh_allow_users
+    fail_msg: "ssh_allow_users does not include '{{ ansible_user }}', which would lock Ansible out of {{ inventory_hostname }}."
+    quiet: true
+
+- name: Refuse a port change Ansible would not follow
+  ansible.builtin.assert:
+    that: ssh_port | int == (ansible_port | default(22)) | int or ssh_allow_port_change | bool
+    fail_msg: >-
+      ssh_port is {{ ssh_port }} but Ansible connects to {{ inventory_hostname }} on port {{ ansible_port | default(22) }}.
+      Changing the SSH port is a two-step move: set ssh_allow_port_change=true, run, then set ansible_port={{ ssh_port }}
+      in the inventory. (Also set it when the connection port differs only because of NAT or port forwarding.)
+    quiet: true
+
+# --- Host keys ----------------------------------------------------------------
+- name: Check which SSH host keys exist
+  ansible.builtin.stat:
+    path: "{{ item }}"
+  loop: "{{ ssh_hostkey_files }}"
+  register: ssh_hardening_hostkeys
+
+- name: Generate missing SSH host keys
+  ansible.builtin.command: ssh-keygen -A
+  changed_when: true
+  when: ssh_hardening_hostkeys.results | rejectattr('stat.exists') | list | length > 0
+
+# --- Configuration ------------------------------------------------------------
+- name: Deploy hardened sshd configuration
+  ansible.builtin.template:
+    src: sshd_hardening.conf.j2
+    dest: /etc/ssh/sshd_config.d/00-hardening.conf
+    owner: root
+    group: root
+    mode: "0600"
+    # sshd itself must accept the file before it replaces the working one.
+    validate: /usr/sbin/sshd -t -f %s
+  register: ssh_hardening_config
+  notify: Reload sshd
+
+- name: Remove drop-in from earlier versions of this framework
+  ansible.builtin.file:
+    path: /etc/ssh/sshd_config.d/99-hardening.conf
+    state: absent
+  notify: Reload sshd
+
+# Ubuntu 24.04 starts sshd through ssh.socket, which ignores "Port" in sshd_config.
+- name: Check for socket-activated sshd
+  ansible.builtin.stat:
+    path: /usr/lib/systemd/system/ssh.socket
+  register: ssh_hardening_socket
+
+- name: Ensure the socket drop-in directory exists
+  ansible.builtin.file:
+    path: /etc/systemd/system/ssh.socket.d
+    state: directory
+    owner: root
+    group: root
+    mode: "0755"
+  when: ssh_hardening_socket.stat.exists and ssh_port | int != 22
+
+- name: Configure the ssh.socket listening port
+  ansible.builtin.copy:
+    dest: /etc/systemd/system/ssh.socket.d/10-hardening.conf
+    content: |
+      # Managed by Ansible (linux-hardening)
+      [Socket]
+      ListenStream=
+      ListenStream={{ ssh_port }}
+    owner: root
+    group: root
+    mode: "0644"
+  when: ssh_hardening_socket.stat.exists and ssh_port | int != 22
+  notify: Restart ssh socket
+
+- name: Remove the ssh.socket port override when the default port is used
+  ansible.builtin.file:
+    path: /etc/systemd/system/ssh.socket.d/10-hardening.conf
+    state: absent
+  when: ssh_port | int == 22
+  notify: Restart ssh socket
+
+# --- Prove the new configuration still lets us in -----------------------------
+- name: Apply pending SSH changes now
+  ansible.builtin.meta: flush_handlers
+
+- name: Prove the hardened configuration still lets us in
+  ansible.builtin.include_tasks: verify_connection.yml
+  when:
+    - ssh_hardening_config is changed
+    - not ansible_check_mode
+    - ssh_port | int == (ansible_port | default(22)) | int
+
+- name: Explain the next step after moving SSH to another port
+  ansible.builtin.debug:
+    msg: >-
+      SSH on {{ inventory_hostname }} now listens on port {{ ssh_port }}. Ansible still connects on
+      {{ ansible_port | default(22) }}, so set ansible_port={{ ssh_port }} in the inventory and re-run; add the old port
+      to ufw_ssh_previous_ports to close it in the firewall.
+  when:
+    - ssh_hardening_config is changed
+    - not ansible_check_mode
+    - ssh_port | int != (ansible_port | default(22)) | int
