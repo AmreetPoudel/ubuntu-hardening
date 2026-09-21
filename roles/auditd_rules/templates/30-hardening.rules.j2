@@ -1,0 +1,92 @@
+# Managed by Ansible (linux-hardening) - local changes will be overwritten.
+{# Syscall rules need per-architecture syscall names: legacy calls (open, chmod, ...) only exist on x86_64. #}
+{% set arch = ansible_facts['architecture'] %}
+{% set legacy = arch == 'x86_64' %}
+{% set arches = ['b64', 'b32'] if legacy else ['b64'] %}
+{% set syscalls_supported = arch in ['x86_64', 'aarch64'] %}
+
+# --- Privilege use and scope ---
+-w /etc/sudoers -p wa -k scope
+-w /etc/sudoers.d -p wa -k scope
+-w {{ sudo_logfile }} -p wa -k sudo_log
+{% if syscalls_supported %}
+{% for a in arches %}
+-a always,exit -F arch={{ a }} -C euid!=uid -F auid!=unset -S execve -k user_emulation
+{% endfor %}
+{% endif %}
+
+# --- Identity and authentication files ---
+-w /etc/group -p wa -k identity
+-w /etc/passwd -p wa -k identity
+-w /etc/gshadow -p wa -k identity
+-w /etc/shadow -p wa -k identity
+-w /etc/security/opasswd -p wa -k identity
+-w /etc/nsswitch.conf -p wa -k identity
+-w /etc/pam.conf -p wa -k identity
+-w /etc/pam.d -p wa -k identity
+-w /etc/security -p wa -k identity
+-w /etc/login.defs -p wa -k login_policy
+
+# --- SSH ---
+-w /etc/ssh/sshd_config -p wa -k sshd
+-w /etc/ssh/sshd_config.d -p wa -k sshd
+
+# --- Time ---
+{% if syscalls_supported %}
+{% for a in arches %}
+-a always,exit -F arch={{ a }} -S adjtimex,settimeofday,clock_settime -k time_change
+{% endfor %}
+{% endif %}
+-w /etc/localtime -p wa -k time_change
+
+# --- Network environment ---
+{% if syscalls_supported %}
+{% for a in arches %}
+-a always,exit -F arch={{ a }} -S sethostname,setdomainname -k system_locale
+{% endfor %}
+{% endif %}
+-w /etc/issue -p wa -k system_locale
+-w /etc/issue.net -p wa -k system_locale
+-w /etc/hosts -p wa -k system_locale
+-w /etc/netplan -p wa -k system_locale
+
+# --- Mandatory access control ---
+-w /etc/apparmor -p wa -k mac_policy
+-w /etc/apparmor.d -p wa -k mac_policy
+
+# --- Logins and sessions ---
+-w /var/log/lastlog -p wa -k logins
+-w /run/faillock -p wa -k logins
+-w /run/utmp -p wa -k session
+-w /var/log/wtmp -p wa -k session
+-w /var/log/btmp -p wa -k session
+
+# --- Scheduled jobs ---
+-w /etc/crontab -p wa -k cron
+-w /etc/cron.d -p wa -k cron
+-w /etc/cron.allow -p wa -k cron
+
+# --- Kernel modules ---
+-w /usr/sbin/insmod -p x -k modules
+-w /usr/sbin/rmmod -p x -k modules
+-w /usr/sbin/modprobe -p x -k modules
+{% if syscalls_supported %}
+{% for a in arches %}
+-a always,exit -F arch={{ a }} -S init_module,finit_module,delete_module -F auid!=unset -k modules
+{% endfor %}
+
+# --- Discretionary access control changes, failed access, mounts, deletions (interactive users) ---
+{% set chmod_calls = 'chmod,fchmod,fchmodat' if legacy else 'fchmod,fchmodat' %}
+{% set chown_calls = 'chown,fchown,fchownat,lchown' if legacy else 'fchown,fchownat' %}
+{% set open_calls = 'creat,open,openat,truncate,ftruncate' if legacy else 'openat,truncate,ftruncate' %}
+{% set delete_calls = 'unlink,unlinkat,rename,renameat' if legacy else 'unlinkat,renameat' %}
+{% for a in arches %}
+-a always,exit -F arch={{ a }} -S {{ chmod_calls }} -F auid>=1000 -F auid!=unset -k perm_mod
+-a always,exit -F arch={{ a }} -S {{ chown_calls }} -F auid>=1000 -F auid!=unset -k perm_mod
+-a always,exit -F arch={{ a }} -S setxattr,lsetxattr,fsetxattr,removexattr,lremovexattr,fremovexattr -F auid>=1000 -F auid!=unset -k perm_mod
+-a always,exit -F arch={{ a }} -S {{ open_calls }} -F exit=-EACCES -F auid>=1000 -F auid!=unset -k access
+-a always,exit -F arch={{ a }} -S {{ open_calls }} -F exit=-EPERM -F auid>=1000 -F auid!=unset -k access
+-a always,exit -F arch={{ a }} -S mount -F auid>=1000 -F auid!=unset -k mounts
+-a always,exit -F arch={{ a }} -S {{ delete_calls }} -F auid>=1000 -F auid!=unset -k delete
+{% endfor %}
+{% endif %}

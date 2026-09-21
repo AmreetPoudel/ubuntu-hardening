@@ -1,0 +1,95 @@
+---
+# Order matters: every allow rule is in place BEFORE the default-deny policy is applied and the firewall enabled,
+# so a partial failure can never leave a host firewalled without SSH.
+
+# UFW re-applies /etc/ufw/sysctl.conf whenever it starts or reloads (including at boot, after systemd-sysctl),
+# which would silently undo the sysctl policy (it ships log_martians=0). Keep the overlapping keys in step.
+- name: Align UFW's own sysctl overrides with the sysctl policy
+  ansible.builtin.lineinfile:
+    path: /etc/ufw/sysctl.conf
+    regexp: '^\s*#?\s*{{ item | replace(".", "/") }}\s*='
+    line: "{{ item | replace('.', '/') }}={{ (sysctl_settings | combine(sysctl_overrides))[item] }}"
+  loop:
+    - net.ipv4.conf.all.accept_redirects
+    - net.ipv4.conf.default.accept_redirects
+    - net.ipv6.conf.all.accept_redirects
+    - net.ipv6.conf.default.accept_redirects
+    - net.ipv4.icmp_echo_ignore_broadcasts
+    - net.ipv4.icmp_ignore_bogus_error_responses
+    - net.ipv4.conf.all.log_martians
+    - net.ipv4.conf.default.log_martians
+  when: item in (sysctl_settings | combine(sysctl_overrides))
+
+- name: Set firewall logging level
+  community.general.ufw:
+    logging: "{{ ufw_log_level }}"
+
+- name: Remove plain SSH allow rules that would shadow the rate limit
+  community.general.ufw:
+    rule: allow
+    port: "{{ ssh_port }}"
+    proto: tcp
+    src: "{{ item }}"
+    delete: true
+  loop: "{{ hardening_mgmt_cidrs if hardening_mgmt_cidrs | length > 0 else ['any'] }}"
+  when: ufw_ssh_rate_limit | bool
+
+- name: Allow SSH
+  community.general.ufw:
+    rule: "{{ 'limit' if ufw_ssh_rate_limit | bool else 'allow' }}"
+    port: "{{ ssh_port }}"
+    proto: tcp
+    src: "{{ item }}"
+    comment: SSH
+  loop: "{{ hardening_mgmt_cidrs if hardening_mgmt_cidrs | length > 0 else ['any'] }}"
+
+- name: Close SSH rules for ports SSH no longer listens on
+  community.general.ufw:
+    rule: "{{ item.1 }}"
+    port: "{{ item.0 }}"
+    proto: tcp
+    delete: true
+  loop: "{{ ufw_ssh_previous_ports | product(['allow', 'limit']) | list }}"
+  loop_control:
+    label: "{{ item.1 }} {{ item.0 }}/tcp"
+
+- name: Allow monitoring scrapes
+  community.general.ufw:
+    rule: allow
+    port: "{{ ufw_monitoring_port }}"
+    proto: tcp
+    src: "{{ item }}"
+    comment: monitoring
+  loop: "{{ ufw_monitoring_cidrs }}"
+
+- name: Apply service and workload rules
+  community.general.ufw:
+    rule: "{{ item.rule | default('allow') }}"
+    port: "{{ item.port | default(omit) }}"
+    proto: "{{ item.proto | default('tcp') }}"
+    src: "{{ item.src | default('any') }}"
+    interface: "{{ item.interface | default(omit) }}"
+    direction: "{{ item.direction | default('in') }}"
+    comment: "{{ item.comment | default(omit) }}"
+  loop: "{{ ufw_rules + ufw_rules_extra }}"
+  loop_control:
+    label: "{{ item.comment | default(item.port | default(item.interface | default('rule'))) }}"
+
+- name: Set default incoming policy
+  community.general.ufw:
+    default: "{{ ufw_default_incoming }}"
+    direction: incoming
+
+- name: Set default outgoing policy
+  community.general.ufw:
+    default: "{{ ufw_default_outgoing }}"
+    direction: outgoing
+
+- name: Set default routed (forwarded) policy
+  community.general.ufw:
+    default: "{{ ufw_default_routed }}"
+    direction: routed
+
+- name: Enable the firewall
+  community.general.ufw:
+    state: enabled

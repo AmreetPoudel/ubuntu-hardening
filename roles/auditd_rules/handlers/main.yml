@@ -1,5 +1,11 @@
 ---
-- name: restart auditd
-  ansible.builtin.service:
+- name: Load audit rules
+  ansible.builtin.command: augenrules --load
+  changed_when: true
+  when: not hardening_is_container | bool
+
+- name: Reload auditd
+  ansible.builtin.systemd:
     name: auditd
-    state: restarted
+    state: reloaded
+  when: not hardening_is_container | bool

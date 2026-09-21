@@ -1,3 +1,0 @@
----
-auditd_space_left_action: SYSLOG
-auditd_action_mail_acct: root

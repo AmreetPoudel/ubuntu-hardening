@@ -1,20 +1,44 @@
 ---
-- name: Configure rsyslog file permissions and security drop-in
+- name: Configure rsyslog permissions
   block:
-
-    - name: Deploy rsyslog hardening drop-in
+    - name: Deploy rsyslog permission defaults
       ansible.builtin.copy:
-        dest: /etc/rsyslog.d/99-hardening.conf
+        dest: /etc/rsyslog.d/00-hardening.conf
         content: |
+          # Managed by Ansible (linux-hardening)
+          # Loaded before the distribution rules so it applies to the log files they create.
           $FileCreateMode {{ rsyslog_file_create_mode }}
           $DirCreateMode 0750
-          $Umask 0027
+          $Umask 0022
         owner: root
         group: root
-        mode: '0644'
-      notify: restart rsyslog
+        mode: "0644"
+      notify: Restart rsyslog
+
+    # A drop-in cannot be validated on its own; check the whole configuration, includes and all.
+    - name: Validate the rsyslog configuration
+      ansible.builtin.command: rsyslogd -N1
+      changed_when: false
+      check_mode: false
 
   rescue:
-    - name: Show failure message but keep going
-      ansible.builtin.debug:
-        msg: "WARNING: rsyslog_hardening failed on {{ inventory_hostname }}, check manually."
+    - name: Remove the drop-in that failed validation
+      ansible.builtin.file:
+        path: /etc/rsyslog.d/00-hardening.conf
+        state: absent
+
+    - name: Stop, rsyslog rejected the generated configuration
+      ansible.builtin.fail:
+        msg: "rsyslog configuration validation failed on {{ inventory_hostname }}; the drop-in was removed."
+
+- name: Remove drop-in from earlier versions of this framework
+  ansible.builtin.file:
+    path: /etc/rsyslog.d/99-hardening.conf
+    state: absent
+  notify: Restart rsyslog
+
+- name: Ensure rsyslog is enabled and running
+  ansible.builtin.systemd:
+    name: rsyslog
+    enabled: true
+    state: started

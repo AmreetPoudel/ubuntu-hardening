@@ -1,22 +1,36 @@
 ---
-- name: Initialize AIDE integrity baseline database
+# Building the baseline can take several minutes on large filesystems, so it runs asynchronously.
+- name: Configure AIDE file integrity monitoring
+  when: aide_enabled | bool
   block:
+    - name: Install AIDE
+      ansible.builtin.apt:
+        name:
+          - aide
+          - aide-common
+        state: present
+        lock_timeout: 300
 
-    - name: Initialize AIDE database if missing
-      ansible.builtin.command: aideinit
-      args:
-        creates: /var/lib/aide/aide.db.new.gz
-      when: init_aide_db | bool
+    - name: Check for an existing AIDE baseline
+      ansible.builtin.stat:
+        path: /var/lib/aide/aide.db
+      register: aide_baseline_db
 
-    - name: Copy initial database to active database location
+    - name: Build the AIDE baseline database
+      ansible.builtin.command: aideinit --yes --force
+      environment:
+        DEBIAN_FRONTEND: noninteractive
+      async: "{{ aide_init_timeout }}"
+      poll: 15
+      changed_when: true
+      when: not aide_baseline_db.stat.exists
+
+    - name: Activate the new baseline
       ansible.builtin.copy:
-        src: /var/lib/aide/aide.db.new.gz
-        dest: /var/lib/aide/aide.db.gz
+        src: /var/lib/aide/aide.db.new
+        dest: /var/lib/aide/aide.db
         remote_src: true
-        creates: /var/lib/aide/aide.db.gz
-      when: init_aide_db | bool
-
-  rescue:
-    - name: Show failure message but keep going
-      ansible.builtin.debug:
-        msg: "WARNING: aide_baseline failed on {{ inventory_hostname }}, check manually."
+        force: false
+        owner: root
+        group: root
+        mode: "0600"

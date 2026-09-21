@@ -1,0 +1,13 @@
+# Managed by Ansible (linux-hardening) - local changes will be overwritten.
+[DEFAULT]
+# Never ban loopback or the management network(s).
+ignoreip = 127.0.0.1/8 ::1{% for cidr in hardening_mgmt_cidrs %} {{ cidr }}{% endfor %}
+
+bantime = {{ fail2ban_bantime }}
+findtime = {{ fail2ban_findtime }}
+maxretry = {{ fail2ban_maxretry }}
+backend = systemd
+
+[sshd]
+enabled = true
+port = {{ ssh_port }}

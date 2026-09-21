@@ -1,17 +1,66 @@
 ---
-- name: Configure auditd rules baseline
-  block:
+- name: Remove the stock rules file (its "-D" would wipe the hardening rules, which sort before "audit.rules")
+  ansible.builtin.file:
+    path: /etc/audit/rules.d/audit.rules
+    state: absent
+  notify: Load audit rules
 
-    - name: Deploy CIS audit rules
-      ansible.builtin.template:
-        src: audit.rules.j2
-        dest: /etc/audit/rules.d/audit.rules
-        owner: root
-        group: root
-        mode: '0640'
-      notify: restart auditd
+- name: Deploy base audit settings
+  ansible.builtin.template:
+    src: 10-base.rules.j2
+    dest: /etc/audit/rules.d/10-base.rules
+    owner: root
+    group: root
+    mode: "0640"
+  notify: Load audit rules
 
-  rescue:
-    - name: Show failure message but keep going
-      ansible.builtin.debug:
-        msg: "WARNING: auditd_rules failed on {{ inventory_hostname }}, check manually."
+- name: Deploy hardening audit rules
+  ansible.builtin.template:
+    src: 30-hardening.rules.j2
+    dest: /etc/audit/rules.d/30-hardening.rules
+    owner: root
+    group: root
+    mode: "0640"
+  notify: Load audit rules
+
+# -e 2 locks the rule set until the next reboot, so it is opt-in and lives in its own file.
+- name: Lock the audit configuration until reboot
+  ansible.builtin.copy:
+    dest: /etc/audit/rules.d/99-finalize.rules
+    content: |
+      # Managed by Ansible (linux-hardening)
+      -e 2
+    owner: root
+    group: root
+    mode: "0640"
+  when: auditd_immutable | bool
+  notify: Load audit rules
+
+- name: Remove the immutable flag file
+  ansible.builtin.file:
+    path: /etc/audit/rules.d/99-finalize.rules
+    state: absent
+  when: not auditd_immutable | bool
+  notify: Load audit rules
+
+- name: Configure auditd log retention and disk-full behaviour
+  ansible.builtin.lineinfile:
+    path: /etc/audit/auditd.conf
+    regexp: '^\s*{{ item.key }}\s*='
+    line: "{{ item.key }} = {{ item.value }}"
+    backup: true
+  loop:
+    - { key: max_log_file, value: "{{ auditd_max_log_file }}" }
+    - { key: num_logs, value: "{{ auditd_num_logs }}" }
+    - { key: max_log_file_action, value: rotate }
+    - { key: space_left_action, value: "{{ auditd_space_left_action }}" }
+    - { key: admin_space_left_action, value: "{{ auditd_admin_space_left_action }}" }
+  notify: Reload auditd
+
+- name: Ensure auditd is enabled and running
+  ansible.builtin.systemd:
+    name: auditd
+    enabled: true
+    state: started
+  # The audit subsystem belongs to the host kernel and cannot be driven from inside a container.
+  when: not hardening_is_container | bool
