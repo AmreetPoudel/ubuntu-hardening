@@ -1,15 +1,22 @@
 ---
-- name: Lock login shell for system service accounts
-  block:
+- name: Read local accounts
+  ansible.builtin.getent:
+    database: passwd
 
-    - name: Set /usr/sbin/nologin shell for non-root system users
-      ansible.builtin.shell: |
-        awk -F: '($3 < 1000 && $1 != "root" && $7 != "/usr/sbin/nologin" && $7 != "/bin/false") {print $1}' /etc/passwd | while read u; do
-          usermod -s /usr/sbin/nologin "$u"
-        done
-      changed_when: false
+- name: Select system accounts that still have a login shell
+  ansible.builtin.set_fact:
+    service_account_targets: >-
+      {% set out = [] -%}
+      {% for name, pw in ansible_facts.getent_passwd.items() -%}
+      {% if 0 < pw[1] | int < 1000 and name not in service_account_shell_exclude and name != ansible_user
+            and pw[5] not in ['/usr/sbin/nologin', '/sbin/nologin', '/bin/false', '/usr/bin/false'] -%}
+      {% set _ = out.append(name) -%}
+      {% endif -%}
+      {% endfor -%}
+      {{ out | to_json }}
 
-  rescue:
-    - name: Show failure message but keep going
-      ansible.builtin.debug:
-        msg: "WARNING: service_account_hardening failed on {{ inventory_hostname }}, check manually."
+- name: Set a non-login shell for system accounts
+  ansible.builtin.user:
+    name: "{{ item }}"
+    shell: /usr/sbin/nologin
+  loop: "{{ service_account_targets | from_json if service_account_targets is string else service_account_targets }}"

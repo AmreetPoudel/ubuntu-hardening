@@ -1,32 +1,45 @@
 ---
-- name: Restrict cron and at scheduling access
-  block:
+# Users who already own a crontab stay allowed, otherwise their jobs would silently stop running.
+- name: Check for cron and at
+  ansible.builtin.stat:
+    path: "{{ item }}"
+  loop:
+    - /usr/sbin/cron
+    - /usr/bin/at
+  register: cron_at_installed
 
-    - name: Create /etc/cron.allow with root user only
-      ansible.builtin.copy:
-        dest: /etc/cron.allow
-        content: "{{ cron_allowed_users | join('\n') }}\n"
-        owner: root
-        group: root
-        mode: '0600'
+- name: Find existing crontabs
+  ansible.builtin.find:
+    paths: /var/spool/cron/crontabs
+    file_type: file
+  register: cron_at_crontabs
 
-    - name: Create /etc/at.allow with root user only
-      ansible.builtin.copy:
-        dest: /etc/at.allow
-        content: "{{ cron_allowed_users | join('\n') }}\n"
-        owner: root
-        group: root
-        mode: '0600'
+- name: Allow only approved users to use cron
+  ansible.builtin.copy:
+    dest: /etc/cron.allow
+    content: "{{ (['root'] + cron_allowed_users + cron_at_crontabs.files | map(attribute='path') | map('basename') | list) | unique | sort | join('\n') }}\n"
+    owner: root
+    group: crontab
+    mode: "0640"
+  when: cron_at_installed.results[0].stat.exists
 
-    - name: Remove cron.deny and at.deny files
-      ansible.builtin.file:
-        path: "{{ item }}"
-        state: absent
-      loop:
-        - /etc/cron.deny
-        - /etc/at.deny
+- name: Remove cron.deny
+  ansible.builtin.file:
+    path: /etc/cron.deny
+    state: absent
+  when: cron_at_installed.results[0].stat.exists
 
-  rescue:
-    - name: Show failure message but keep going
-      ansible.builtin.debug:
-        msg: "WARNING: cron_at_restriction failed on {{ inventory_hostname }}, check manually."
+- name: Allow only approved users to use at
+  ansible.builtin.copy:
+    dest: /etc/at.allow
+    content: "{{ (['root'] + cron_allowed_users) | unique | sort | join('\n') }}\n"
+    owner: root
+    group: daemon
+    mode: "0640"
+  when: cron_at_installed.results[1].stat.exists
+
+- name: Remove at.deny
+  ansible.builtin.file:
+    path: /etc/at.deny
+    state: absent
+  when: cron_at_installed.results[1].stat.exists

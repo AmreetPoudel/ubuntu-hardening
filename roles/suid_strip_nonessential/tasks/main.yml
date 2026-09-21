@@ -1,15 +1,28 @@
 ---
-- name: Strip SUID bit from non-essential system binaries
-  block:
+# dpkg-statoverride makes the change survive package upgrades, which would otherwise restore the SUID bit.
+- name: Check which binaries exist
+  ansible.builtin.stat:
+    path: "{{ item }}"
+  loop: "{{ suid_strip_binaries }}"
+  register: suid_strip_stat
 
-    - name: Remove SUID/SGID permissions on non-essential binaries
-      ansible.builtin.file:
-        path: "{{ item }}"
-        mode: 'u-s,g-s'
-      loop: "{{ nonessential_suid_binaries }}"
-      failed_when: false
+- name: Look for existing dpkg overrides
+  ansible.builtin.command: "dpkg-statoverride --list {{ item.item }}"
+  loop: "{{ suid_strip_stat.results }}"
+  loop_control:
+    label: "{{ item.item }}"
+  register: suid_strip_overrides
+  changed_when: false
+  failed_when: false
+  check_mode: false
+  when: item.stat.exists
 
-  rescue:
-    - name: Show failure message but keep going
-      ansible.builtin.debug:
-        msg: "WARNING: suid_strip_nonessential failed on {{ inventory_hostname }}, check manually."
+- name: Remove the SUID/SGID bit persistently
+  ansible.builtin.command: "dpkg-statoverride --update --add root root 0755 {{ item.item.item }}"
+  loop: "{{ suid_strip_overrides.results }}"
+  loop_control:
+    label: "{{ item.item.item }}"
+  changed_when: true
+  when:
+    - item.rc is defined
+    - item.rc != 0

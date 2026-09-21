@@ -1,21 +1,22 @@
 ---
-- name: Enforce strict permissions on /var/log files
-  block:
+# Only files that deviate are changed. Files that need group/other access by design
+# (wtmp, btmp, lastlog, ...) are listed in log_perms_exclude.
+- name: Find log files
+  ansible.builtin.find:
+    paths: /var/log
+    file_type: file
+    recurse: true
+    excludes: "{{ log_perms_exclude }}"
+  register: log_file_perms_found
 
-    - name: Find all log files in /var/log
-      ansible.builtin.find:
-        paths: /var/log
-        file_type: file
-        recurse: true
-      register: log_files
-
-    - name: Remove world read/write/execute and group write/execute from log files
-      ansible.builtin.file:
-        path: "{{ item.path }}"
-        mode: 'g-wx,o-rwx'
-      loop: "{{ log_files.files }}"
-
-  rescue:
-    - name: Show failure message but keep going
-      ansible.builtin.debug:
-        msg: "WARNING: log_file_perms failed on {{ inventory_hostname }}, check manually."
+- name: Restrict group-write and any access for others on log files
+  ansible.builtin.file:
+    path: "{{ item }}"
+    mode: "g-wx,o-rwx"
+  loop: >-
+    {{ (log_file_perms_found.files | selectattr('wgrp') | list
+        + log_file_perms_found.files | selectattr('xgrp') | list
+        + log_file_perms_found.files | selectattr('roth') | list
+        + log_file_perms_found.files | selectattr('woth') | list
+        + log_file_perms_found.files | selectattr('xoth') | list)
+       | map(attribute='path') | unique | list }}

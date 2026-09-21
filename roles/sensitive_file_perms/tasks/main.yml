@@ -1,16 +1,36 @@
 ---
-- name: Enforce strict file permissions on sensitive system files
-  block:
+- name: Check which sensitive paths exist on this host
+  ansible.builtin.stat:
+    path: "{{ item.path }}"
+  loop: "{{ sensitive_files }}"
+  loop_control:
+    label: "{{ item.path }}"
+  register: sensitive_file_perms_stat
 
-    - name: Set permissions on sensitive system files
-      ansible.builtin.file:
-        path: "{{ item.path }}"
-        mode: "{{ item.mode }}"
-        owner: "{{ item.owner }}"
-        group: "{{ item.group }}"
-      loop: "{{ sensitive_files }}"
+- name: Enforce ownership and permissions on sensitive files and directories
+  ansible.builtin.file:
+    path: "{{ item.item.path }}"
+    state: "{{ item.item.state | default('file') }}"
+    owner: "{{ item.item.owner | default('root') }}"
+    group: "{{ item.item.group | default('root') }}"
+    mode: "{{ item.item.mode }}"
+  loop: "{{ sensitive_file_perms_stat.results }}"
+  loop_control:
+    label: "{{ item.item.path }}"
+  when: item.stat.exists
 
-  rescue:
-    - name: Show failure message but keep going
-      ansible.builtin.debug:
-        msg: "WARNING: sensitive_file_perms failed on {{ inventory_hostname }}, check manually."
+- name: Find SSH host private keys
+  ansible.builtin.find:
+    paths: /etc/ssh
+    patterns: "ssh_host_*_key"
+  register: sensitive_file_perms_hostkeys
+
+- name: Restrict SSH host private keys
+  ansible.builtin.file:
+    path: "{{ item.path }}"
+    owner: root
+    group: root
+    mode: "0600"
+  loop: "{{ sensitive_file_perms_hostkeys.files }}"
+  loop_control:
+    label: "{{ item.path }}"

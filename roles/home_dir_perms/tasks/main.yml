@@ -1,21 +1,30 @@
 ---
-- name: Restrict user home directory permissions
-  block:
+# Only home directories that belong to a real local account are touched (never a stray directory in /home).
+- name: Read local accounts
+  ansible.builtin.getent:
+    database: passwd
 
-    - name: Find all home directories in /home
-      ansible.builtin.find:
-        paths: /home
-        file_type: directory
-        recurse: false
-      register: home_dirs
+- name: Find directories in /home
+  ansible.builtin.find:
+    paths: /home
+    file_type: directory
+    recurse: false
+  register: home_dir_perms_found
 
-    - name: Set 0750 permissions on user home directories
-      ansible.builtin.file:
-        path: "{{ item.path }}"
-        mode: "{{ home_dir_mode }}"
-      loop: "{{ home_dirs.files }}"
+- name: Select home directories of regular accounts
+  ansible.builtin.set_fact:
+    home_dir_perms_homes: >-
+      {% set out = [] -%}
+      {% for name, pw in ansible_facts.getent_passwd.items() -%}
+      {% if 1000 <= pw[1] | int < 60000 and name not in home_dir_exclude_users and pw[4] in home_dir_perms_found.files | map(attribute='path') -%}
+      {% set _ = out.append(pw[4]) -%}
+      {% endif -%}
+      {% endfor -%}
+      {{ out | to_json }}
 
-  rescue:
-    - name: Show failure message but keep going
-      ansible.builtin.debug:
-        msg: "WARNING: home_dir_perms failed on {{ inventory_hostname }}, check manually."
+- name: Restrict home directory permissions
+  ansible.builtin.file:
+    path: "{{ item }}"
+    state: directory
+    mode: "{{ home_dir_mode }}"
+  loop: "{{ home_dir_perms_homes | from_json if home_dir_perms_homes is string else home_dir_perms_homes }}"
