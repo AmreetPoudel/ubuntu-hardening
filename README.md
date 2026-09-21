@@ -71,6 +71,20 @@ Settings you will most likely touch: `hardening_mgmt_cidrs`, `ssh_*`, `ufw_rules
 - **No surprise restarts**: Docker and PostgreSQL are not restarted unless `docker_allow_restart` / `postgres_allow_restart` are set.
 - **No blind mass changes**: file scans are report-only; `/tmp` becomes tmpfs through fstab (next boot) instead of being mounted over a live directory.
 
+## Changing the SSH port
+
+A two-step move, so Ansible never loses its connection:
+
+1. Run with `-e ssh_port=<new> -e ssh_allow_port_change=true`. The firewall opens the new port first, then sshd
+   moves (through an `ssh.socket` override on Ubuntu 24.04). The play then tells you Ansible can no longer reach the old port.
+2. Set `ansible_port=<new>` in the inventory, add the old port to `ufw_ssh_previous_ports` to close it, and re-run.
+
+## Reading the audit
+
+Each check is `PASS` (matches the policy), `FAIL` (does not; the title says what was expected) or `SKIP` (not
+applicable, e.g. Docker checks on a host without Docker). The score is PASS / (PASS + FAIL); SKIPs are excluded.
+Set `audit_min_score` to fail the run below a threshold. Reports land in `reports/` (git-ignored).
+
 ## Testing
 
 `make test` (`tests/run.sh`) builds an Ubuntu 24.04 container with systemd and sshd and connects like a real host
