@@ -1,0 +1,246 @@
+---
+# Internal data for the audit (not a tuning knob, so it lives with the role).
+# Expressions are templated lazily, when the audit evaluates them, using the facts collected by tasks/main.yml.
+# Each check: id, category, title, passed, and optionally `applicable` (SKIP when false).
+
+compliance_audit_services:
+  - ssh
+  - auditd
+  - fail2ban
+  - chrony
+  - rsyslog
+  - ufw
+
+compliance_audit_files:
+  - /etc/login.defs
+  - /etc/pam.d/common-auth
+  - /etc/pam.d/common-account
+  - /etc/pam.d/common-password
+  - /etc/security/faillock.conf
+  - /etc/security/pwquality.conf.d/hardening.conf
+  - /etc/security/limits.d/10-disable-coredumps.conf
+  - /etc/sudoers.d/99-sudo-hardening
+  - /etc/profile.d/99-tmout.sh
+  - /etc/issue
+  - /etc/issue.net
+  - /etc/modprobe.d/hardening-blacklist.conf
+  - /etc/cron.allow
+  - /etc/docker/daemon.json
+
+compliance_audit_checks:
+  # --- SSH (effective configuration from `sshd -T`) ---
+  - id: ssh.port
+    category: SSH
+    title: "sshd listens on port {{ ssh_port }}"
+    passed: "{{ compliance_audit_ssh.get('port') == ssh_port | string }}"
+  - id: ssh.root_login
+    category: SSH
+    title: "PermitRootLogin is {{ ssh_permit_root_login }}"
+    passed: "{{ compliance_audit_ssh.get('permitrootlogin') == ssh_permit_root_login }}"
+  - id: ssh.password_authentication
+    category: SSH
+    title: "PasswordAuthentication is {{ ssh_password_authentication }}"
+    passed: "{{ compliance_audit_ssh.get('passwordauthentication') == ssh_password_authentication }}"
+  - id: ssh.empty_passwords
+    category: SSH
+    title: Empty passwords are refused
+    passed: "{{ compliance_audit_ssh.get('permitemptypasswords') == 'no' }}"
+  - id: ssh.max_auth_tries
+    category: SSH
+    title: "MaxAuthTries is {{ ssh_max_auth_tries }} or lower"
+    passed: "{{ compliance_audit_ssh.get('maxauthtries', '99') | int <= ssh_max_auth_tries | int }}"
+  - id: ssh.x11
+    category: SSH
+    title: X11 forwarding is off
+    passed: "{{ compliance_audit_ssh.get('x11forwarding') == 'no' }}"
+  - id: ssh.tcp_forwarding
+    category: SSH
+    title: "AllowTcpForwarding is {{ ssh_allow_tcp_forwarding }}"
+    passed: "{{ compliance_audit_ssh.get('allowtcpforwarding') == ssh_allow_tcp_forwarding }}"
+  - id: ssh.log_level
+    category: SSH
+    title: "LogLevel is {{ ssh_log_level }}"
+    passed: "{{ compliance_audit_ssh.get('loglevel', '') | lower == ssh_log_level | lower }}"
+  - id: ssh.client_alive
+    category: SSH
+    title: "ClientAliveInterval is {{ ssh_client_alive_interval }}"
+    passed: "{{ compliance_audit_ssh.get('clientaliveinterval') == ssh_client_alive_interval | string }}"
+  - id: ssh.strong_ciphers
+    category: SSH
+    title: No CBC, 3DES or RC4 ciphers are offered
+    passed: "{{ compliance_audit_ssh.get('ciphers', '') is not search('cbc|3des|arcfour') and compliance_audit_ssh.get('ciphers', '') | length > 0 }}"
+  - id: ssh.banner
+    category: SSH
+    title: Login banner is shown before authentication
+    passed: "{{ compliance_audit_ssh.get('banner') == '/etc/issue.net' }}"
+
+  # --- Authentication ---
+  - id: auth.root_locked
+    category: Authentication
+    title: Root password is locked
+    applicable: "{{ lock_root_account | bool }}"
+    passed: "{{ (compliance_audit_root.stdout.split() + ['', ''])[1] in ['L', 'LK'] }}"
+  - id: auth.uid0
+    category: Authentication
+    title: Only root has UID 0
+    passed: "{{ compliance_audit_uid0.stdout_lines | length == 0 and compliance_audit_uid0.rc == 0 }}"
+  - id: auth.empty_passwords
+    category: Authentication
+    title: No account has an empty password
+    passed: "{{ compliance_audit_emptypw.stdout_lines | length == 0 and compliance_audit_emptypw.rc == 0 }}"
+  - id: auth.pwquality
+    category: Authentication
+    title: "Password minimum length is {{ pam_pwquality_minlen }}"
+    passed: >-
+      {{ compliance_audit_file.get('/etc/security/pwquality.conf.d/hardening.conf', '')
+         is search('(?m)^\s*minlen\s*=\s*' ~ pam_pwquality_minlen ~ '\s*$') }}
+  - id: auth.faillock_stack
+    category: Authentication
+    title: pam_faillock is active in the PAM auth stack
+    applicable: "{{ pam_faillock_enabled | bool }}"
+    passed: >-
+      {{ compliance_audit_file.get('/etc/pam.d/common-auth', '') is search('pam_faillock\.so\s+preauth')
+         and compliance_audit_file.get('/etc/pam.d/common-auth', '') is search('pam_faillock\.so\s+authfail') }}
+  - id: auth.faillock_threshold
+    category: Authentication
+    title: "Accounts lock after {{ pam_faillock_deny }} failed logins"
+    applicable: "{{ pam_faillock_enabled | bool }}"
+    passed: "{{ compliance_audit_file.get('/etc/security/faillock.conf', '') is search('(?m)^\\s*deny\\s*=\\s*' ~ pam_faillock_deny ~ '\\s*$') }}"
+  - id: auth.pwhistory
+    category: Authentication
+    title: "Last {{ pam_pwhistory_remember }} passwords cannot be reused"
+    applicable: "{{ pam_pwhistory_enabled | bool }}"
+    passed: "{{ compliance_audit_file.get('/etc/pam.d/common-password', '') is search('pam_pwhistory\\.so.*remember=' ~ pam_pwhistory_remember) }}"
+  - id: auth.pass_max_days
+    category: Authentication
+    title: "PASS_MAX_DAYS is {{ password_max_days }}"
+    passed: "{{ compliance_audit_file.get('/etc/login.defs', '') is search('(?m)^\\s*PASS_MAX_DAYS\\s+' ~ password_max_days ~ '\\s*$') }}"
+  - id: auth.pass_min_days
+    category: Authentication
+    title: "PASS_MIN_DAYS is {{ password_min_days }}"
+    passed: "{{ compliance_audit_file.get('/etc/login.defs', '') is search('(?m)^\\s*PASS_MIN_DAYS\\s+' ~ password_min_days ~ '\\s*$') }}"
+  - id: auth.pass_warn_age
+    category: Authentication
+    title: "PASS_WARN_AGE is {{ password_warn_age }}"
+    passed: "{{ compliance_audit_file.get('/etc/login.defs', '') is search('(?m)^\\s*PASS_WARN_AGE\\s+' ~ password_warn_age ~ '\\s*$') }}"
+  - id: auth.umask
+    category: Authentication
+    title: "Default UMASK is {{ system_umask }}"
+    passed: "{{ compliance_audit_file.get('/etc/login.defs', '') is search('(?m)^\\s*UMASK\\s+' ~ system_umask ~ '\\s*$') }}"
+  - id: auth.sudo
+    category: Authentication
+    title: sudo requires a pty and logs to a file
+    passed: >-
+      {{ compliance_audit_file.get('/etc/sudoers.d/99-sudo-hardening', '') is search('(?m)^Defaults\s+use_pty')
+         and compliance_audit_file.get('/etc/sudoers.d/99-sudo-hardening', '') is search('(?m)^Defaults\s+logfile=') }}
+  - id: auth.tmout
+    category: Authentication
+    title: "Idle shells time out after {{ shell_idle_timeout }}s"
+    passed: "{{ compliance_audit_file.get('/etc/profile.d/99-tmout.sh', '') is search('TMOUT=' ~ shell_idle_timeout) }}"
+
+  # --- Network ---
+  - id: net.ufw_active
+    category: Network
+    title: Firewall is active
+    passed: "{{ compliance_audit_ufw.stdout is search('Status: active') }}"
+  - id: net.ufw_default_incoming
+    category: Network
+    title: "Default incoming policy is {{ ufw_default_incoming }}"
+    passed: "{{ compliance_audit_ufw.stdout is search('Default: ' ~ ufw_default_incoming ~ ' \\(incoming\\)') }}"
+  - id: net.ufw_ssh
+    category: Network
+    title: "SSH port {{ ssh_port }} is allowed through the firewall"
+    passed: "{{ compliance_audit_ufw.stdout is search(ssh_port ~ '/tcp\\s+(ALLOW|LIMIT)') }}"
+  - id: net.fail2ban
+    category: Network
+    title: fail2ban is running
+    passed: "{{ compliance_audit_svc_state.get('fail2ban') == 'active' }}"
+
+  # --- Logging, time and updates ---
+  - id: log.auditd
+    category: Logging
+    title: auditd is running
+    passed: "{{ compliance_audit_svc_state.get('auditd') == 'active' }}"
+  - id: log.audit_rules
+    category: Logging
+    title: Hardening audit rules are loaded
+    passed: "{{ compliance_audit_rules.stdout is search('-k identity') }}"
+  - id: log.rsyslog
+    category: Logging
+    title: rsyslog is running
+    passed: "{{ compliance_audit_svc_state.get('rsyslog') == 'active' }}"
+  - id: log.journal
+    category: Logging
+    title: Journal is stored persistently
+    applicable: "{{ journald_storage == 'persistent' }}"
+    passed: "{{ compliance_audit_journal.stat.exists }}"
+  - id: time.chrony
+    category: Logging
+    title: chrony time synchronisation is running
+    passed: "{{ compliance_audit_svc_state.get('chrony') == 'active' }}"
+  - id: pkg.unattended_upgrades
+    category: Updates
+    title: Automatic security updates are enabled
+    applicable: "{{ unattended_upgrades_enabled | bool }}"
+    passed: "{{ 'unattended-upgrades' in ansible_facts.packages and compliance_audit_uu.stdout is search('\"1\"') }}"
+
+  # --- OS baseline ---
+  - id: os.apparmor
+    category: OS
+    title: AppArmor is enabled
+    applicable: "{{ apparmor_enforce_enabled | bool }}"
+    passed: "{{ compliance_audit_apparmor.rc == 0 }}"
+  - id: os.coredumps
+    category: OS
+    title: Core dumps are disabled
+    passed: "{{ compliance_audit_file.get('/etc/security/limits.d/10-disable-coredumps.conf', '') is search('hard\\s+core\\s+0') }}"
+  - id: os.banner
+    category: OS
+    title: Legal banner is set in /etc/issue and /etc/issue.net
+    passed: "{{ compliance_audit_file.get('/etc/issue') == login_banner_text and compliance_audit_file.get('/etc/issue.net') == login_banner_text }}"
+  - id: os.cron_allow
+    category: OS
+    title: cron is restricted with cron.allow
+    applicable: "{{ 'cron' in ansible_facts.packages }}"
+    passed: "{{ compliance_audit_file.get('/etc/cron.allow', '') is search('(?m)^root$') }}"
+  - id: os.tmp_options
+    category: OS
+    title: "/tmp is mounted with {{ tmp_mount_options }}"
+    applicable: "{{ tmp_mount_manage | bool and '/tmp' in compliance_audit_mount_options }}"
+    passed: >-
+      {{ compliance_audit_mount_options.get('/tmp', '').split(',') | intersect(tmp_mount_options.split(','))
+         | length == tmp_mount_options.split(',') | length }}
+  - id: os.dev_shm_options
+    category: OS
+    title: "/dev/shm is mounted with {{ dev_shm_mount_options }}"
+    applicable: "{{ tmp_mount_manage | bool and '/dev/shm' in compliance_audit_mount_options }}"
+    passed: >-
+      {{ compliance_audit_mount_options.get('/dev/shm', '').split(',') | intersect(dev_shm_mount_options.split(','))
+         | length == dev_shm_mount_options.split(',') | length }}
+
+  # --- Workloads (SKIP where the software is absent) ---
+  - id: k8s.swap
+    category: Kubernetes
+    title: Swap is disabled on the node
+    applicable: "{{ inventory_hostname in groups.get('k8s_nodes', []) and k8s_disable_swap | bool }}"
+    passed: "{{ ansible_facts.swaptotal_mb == 0 }}"
+  - id: nginx.server_tokens
+    category: Nginx
+    title: server_tokens is off
+    applicable: "{{ compliance_audit_workloads.results[1].stat.exists }}"
+    passed: "{{ compliance_audit_nginx.stdout | default('') is search('(?m)^\\s*server_tokens\\s+off;') }}"
+  - id: nginx.tls
+    category: Nginx
+    title: TLS 1.0 and 1.1 are not enabled
+    applicable: "{{ compliance_audit_workloads.results[1].stat.exists }}"
+    passed: "{{ compliance_audit_nginx.stdout | default('') is not search('(?m)^\\s*ssl_protocols\\b[^;]*\\bTLSv1(\\.1)?(?=[\\s;])') }}"
+  - id: postgres.password_encryption
+    category: PostgreSQL
+    title: Passwords are stored with scram-sha-256
+    applicable: "{{ compliance_audit_workloads.results[2].stat.exists and compliance_audit_postgres.rc | default(1) == 0 }}"
+    passed: "{{ 'password_encryption=scram-sha-256' in compliance_audit_postgres.stdout_lines | default([]) }}"
+  - id: postgres.ssl
+    category: PostgreSQL
+    title: TLS is enabled
+    applicable: "{{ compliance_audit_workloads.results[2].stat.exists and compliance_audit_postgres.rc | default(1) == 0 }}"
+    passed: "{{ 'ssl=on' in compliance_audit_postgres.stdout_lines | default([]) }}"

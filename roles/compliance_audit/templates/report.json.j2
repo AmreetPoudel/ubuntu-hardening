@@ -1,0 +1,1 @@
+{{ {'generated': compliance_audit_stamp, 'hosts': ansible_play_hosts | map('extract', hostvars, 'compliance_audit_summary') | list} | to_nice_json }}

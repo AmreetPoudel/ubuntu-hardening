@@ -1,0 +1,118 @@
+---
+# Read-only inventory of risky filesystem state. Nothing is changed: mass chmod/chown of "every world-writable
+# file" would corrupt container image layers and application data, so findings are reported for a human to judge.
+
+- name: Build the find commands
+  ansible.builtin.set_fact:
+    security_scan_commands: >-
+      {% set mounts = ansible_facts['mounts']
+                      | selectattr('fstype', 'in', ['ext2', 'ext3', 'ext4', 'xfs', 'btrfs', 'zfs', 'f2fs', 'jfs', 'overlay'])
+                      | map(attribute='mount') | list -%}
+      {% set mounts = (['/'] + mounts) | unique | list -%}
+      {% set prune = [] -%}
+      {% for p in security_scan_prune_paths -%}
+      {% if not loop.first %}{% set _ = prune.append('-o') %}{% endif -%}
+      {% set _ = prune.extend(['-path', p]) -%}
+      {% endfor -%}
+      {% set expressions = {
+           'suid_sgid_files': ['-type', 'f', '-perm', '/6000'],
+           'world_writable_files': ['-type', 'f', '-perm', '-0002'],
+           'world_writable_dirs_without_sticky': ['-type', 'd', '-perm', '-0002', '!', '-perm', '-1000'],
+           'unowned_files': ['(', '-nouser', '-o', '-nogroup', ')']} -%}
+      {% set out = [] -%}
+      {% for name, expr in expressions.items() -%}
+      {% set _ = out.append({'name': name,
+           'argv': ['find'] + mounts + ['-xdev', '('] + prune + [')', '-prune', '-o'] + expr + ['-print']}) -%}
+      {% endfor -%}
+      {{ out }}
+
+- name: Scan filesystems
+  ansible.builtin.command:
+    argv: "{{ item.argv }}"
+  loop: "{{ security_scan_commands }}"
+  loop_control:
+    label: "{{ item.name }}"
+  register: security_scan_find
+  async: "{{ security_scan_timeout }}"
+  poll: 10
+  changed_when: false
+  # find exits non-zero when it meets an unreadable directory; the findings it did print are still valid.
+  failed_when: false
+  check_mode: false
+
+- name: Collect file capabilities
+  ansible.builtin.command: getcap -r /usr /opt
+  register: security_scan_caps
+  changed_when: false
+  failed_when: false
+  check_mode: false
+
+- name: Verify installed package files against their checksums
+  ansible.builtin.command: debsums -s -c
+  register: security_scan_debsums
+  changed_when: false
+  failed_when: false
+  check_mode: false
+
+- name: Collect listening sockets
+  ansible.builtin.command: ss -H -tulpn
+  register: security_scan_listening
+  changed_when: false
+  failed_when: false
+  check_mode: false
+
+- name: Validate passwd and group databases
+  ansible.builtin.command: "{{ item }} -r"
+  loop:
+    - pwck
+    - grpck
+  register: security_scan_dbcheck
+  changed_when: false
+  failed_when: false
+  check_mode: false
+
+- name: Assemble findings for this host
+  ansible.builtin.set_fact:
+    security_scan_result: >-
+      {{ {'host': inventory_hostname}
+         | combine(dict(security_scan_find.results | map(attribute='item.name') | zip(security_scan_find.results | map(attribute='stdout_lines'))))
+         | combine({
+             'file_capabilities': security_scan_caps.stdout_lines,
+             'modified_package_files': security_scan_debsums.stdout_lines,
+             'listening_sockets': security_scan_listening.stdout_lines,
+             'passwd_group_problems': (security_scan_dbcheck.results | map(attribute='stdout_lines') | flatten | list)}) }}
+
+- name: Summarise findings
+  ansible.builtin.debug:
+    msg: >-
+      {{ inventory_hostname }}:
+      {% for key, value in security_scan_result.items() if key != 'host' %}
+      {{ key }}={{ value | length }}{{ ', ' if not loop.last }}
+      {%- endfor %}
+
+- name: Write the scan report
+  delegate_to: localhost
+  become: false
+  run_once: true
+  block:
+    - name: Ensure the reports directory exists
+      ansible.builtin.file:
+        path: "{{ audit_report_dir }}"
+        state: directory
+        mode: "0755"
+
+    - name: Timestamp the scan
+      ansible.builtin.set_fact:
+        security_scan_stamp: "{{ now(utc=true, fmt='%Y%m%dT%H%M%SZ') }}"
+
+    - name: Write the scan results
+      ansible.builtin.copy:
+        dest: "{{ audit_report_dir }}/scan-{{ security_scan_stamp }}.json"
+        content: >-
+          {{ {'generated': security_scan_stamp,
+              'hosts': ansible_play_hosts | map('extract', hostvars, 'security_scan_result') | list} | to_nice_json }}
+        mode: "0644"
+
+    - name: Say where the scan results are
+      ansible.builtin.debug:
+        msg: "Scan results written to {{ audit_report_dir }}/scan-{{ security_scan_stamp }}.json"

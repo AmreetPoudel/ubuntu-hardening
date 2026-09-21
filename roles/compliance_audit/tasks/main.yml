@@ -1,0 +1,312 @@
+---
+# Read-only. Every command runs in check mode too, and nothing on the target is modified.
+# Expected values come from the same policy variables the hardening roles use, so the audit cannot drift from them.
+
+- name: Gather package facts
+  ansible.builtin.package_facts:
+    manager: apt
+
+- name: Collect the effective sshd configuration
+  ansible.builtin.command: sshd -T
+  register: compliance_audit_sshd
+  changed_when: false
+  failed_when: false
+  check_mode: false
+
+- name: Collect kernel parameters
+  ansible.builtin.command: sysctl -a
+  register: compliance_audit_sysctl
+  changed_when: false
+  failed_when: false
+  check_mode: false
+
+- name: Collect service states
+  ansible.builtin.command: "systemctl is-active {{ item }}"  # noqa: command-instead-of-module
+  loop: "{{ compliance_audit_services }}"
+  register: compliance_audit_svc
+  changed_when: false
+  failed_when: false
+  check_mode: false
+
+- name: Collect active units
+  ansible.builtin.command: systemctl list-units --state=active --no-legend --plain  # noqa: command-instead-of-module
+  register: compliance_audit_units
+  changed_when: false
+  failed_when: false
+  check_mode: false
+
+- name: Collect firewall status
+  ansible.builtin.command: ufw status verbose
+  register: compliance_audit_ufw
+  changed_when: false
+  failed_when: false
+  check_mode: false
+
+- name: Collect root account status
+  ansible.builtin.command: passwd -S root
+  register: compliance_audit_root
+  changed_when: false
+  failed_when: false
+  check_mode: false
+
+- name: Find extra UID 0 accounts
+  ansible.builtin.command:
+    argv: [awk, "-F:", '($3==0 && $1!="root"){print $1}', /etc/passwd]
+  register: compliance_audit_uid0
+  changed_when: false
+  failed_when: false
+  check_mode: false
+
+- name: Find accounts with an empty password
+  ansible.builtin.command:
+    argv: [awk, "-F:", '($2==""){print $1}', /etc/shadow]
+  register: compliance_audit_emptypw
+  changed_when: false
+  failed_when: false
+  check_mode: false
+
+- name: Collect loaded audit rules
+  ansible.builtin.command: auditctl -l
+  register: compliance_audit_rules
+  changed_when: false
+  failed_when: false
+  check_mode: false
+
+- name: Collect unattended-upgrades setting
+  ansible.builtin.command: apt-config dump APT::Periodic::Unattended-Upgrade
+  register: compliance_audit_uu
+  changed_when: false
+  failed_when: false
+  check_mode: false
+
+- name: Collect mount options of the temporary filesystems
+  ansible.builtin.command: "findmnt --noheadings --raw --output OPTIONS --mountpoint {{ item }}"
+  loop:
+    - /tmp
+    - /dev/shm
+  register: compliance_audit_mountopts
+  changed_when: false
+  failed_when: false
+  check_mode: false
+
+- name: Check AppArmor
+  ansible.builtin.command: aa-status --enabled
+  register: compliance_audit_apparmor
+  changed_when: false
+  failed_when: false
+  check_mode: false
+
+- name: Read configuration files
+  ansible.builtin.slurp:
+    src: "{{ item }}"
+  loop: "{{ compliance_audit_files }}"
+  register: compliance_audit_slurp
+  failed_when: false
+
+- name: Stat sensitive files
+  ansible.builtin.stat:
+    path: "{{ item.path }}"
+  loop: "{{ sensitive_files }}"
+  loop_control:
+    label: "{{ item.path }}"
+  register: compliance_audit_stat
+
+- name: Check for the persistent journal directory
+  ansible.builtin.stat:
+    path: /var/log/journal
+  register: compliance_audit_journal
+
+- name: Detect workloads
+  ansible.builtin.stat:
+    path: "{{ item }}"
+  loop:
+    - /usr/bin/dockerd
+    - /etc/nginx/nginx.conf
+    - /etc/postgresql
+  register: compliance_audit_workloads
+
+- name: Dump the effective Nginx configuration
+  ansible.builtin.command: nginx -T
+  register: compliance_audit_nginx
+  changed_when: false
+  failed_when: false
+  check_mode: false
+  when: compliance_audit_workloads.results[1].stat.exists
+
+- name: Read PostgreSQL settings
+  ansible.builtin.command: >-
+    psql -X -At -c "select name || '=' || setting from pg_settings
+    where name in ('ssl','password_encryption','log_connections','log_disconnections','ssl_min_protocol_version')"
+  become: true
+  become_user: postgres
+  register: compliance_audit_postgres
+  changed_when: false
+  failed_when: false
+  check_mode: false
+  when: compliance_audit_workloads.results[2].stat.exists
+
+# --- Turn raw output into lookups ---------------------------------------------------------------------------
+# Results are emitted as Python literals ({{ out }}), which Ansible always converts back to real lists/dicts.
+- name: Build lookups from collected data
+  ansible.builtin.set_fact:
+    compliance_audit_ssh: >-
+      {% set d = {} -%}
+      {% for line in compliance_audit_sshd.stdout_lines -%}
+      {% set p = line.split(' ', 1) -%}
+      {% if p | length == 2 %}{% set _ = d.update({p[0]: p[1]}) %}{% endif -%}
+      {% endfor -%}
+      {{ d }}
+    compliance_audit_sysctl_values: >-
+      {% set d = {} -%}
+      {% for line in compliance_audit_sysctl.stdout_lines -%}
+      {% set p = line.split(' = ', 1) -%}
+      {% if p | length == 2 %}{% set _ = d.update({p[0]: p[1]}) %}{% endif -%}
+      {% endfor -%}
+      {{ d }}
+    compliance_audit_mount_options: >-
+      {% set d = {} -%}
+      {% for r in compliance_audit_mountopts.results if r.rc == 0 and r.stdout | trim | length > 0 -%}
+      {% set _ = d.update({r.item: r.stdout | trim}) -%}
+      {% endfor -%}
+      {{ d }}
+    compliance_audit_svc_state: >-
+      {% set d = {} -%}
+      {% for r in compliance_audit_svc.results -%}
+      {% set _ = d.update({r.item: r.stdout}) -%}
+      {% endfor -%}
+      {{ d }}
+    compliance_audit_file: >-
+      {% set d = {} -%}
+      {% for r in compliance_audit_slurp.results -%}
+      {% set _ = d.update({r.item: (r.content | default('') | b64decode)}) -%}
+      {% endfor -%}
+      {{ d }}
+    compliance_audit_stat_by_path: >-
+      {% set d = {} -%}
+      {% for r in compliance_audit_stat.results -%}
+      {% set _ = d.update({r.item.path: r.stat}) -%}
+      {% endfor -%}
+      {{ d }}
+
+- name: Build checks that depend on policy values
+  ansible.builtin.set_fact:
+    compliance_audit_dynamic: >-
+      {% set out = [] -%}
+      {% for key, value in (sysctl_settings | combine(sysctl_overrides)).items() | sort -%}
+      {% set _ = out.append({
+           'id': 'sysctl.' ~ key, 'category': 'Kernel', 'title': key ~ ' = ' ~ value,
+           'applicable': key in compliance_audit_sysctl_values,
+           'passed': (compliance_audit_sysctl_values.get(key, '') | trim | regex_replace('\s+', ' ')) == (value | string)}) -%}
+      {% endfor -%}
+      {% for item in sensitive_files -%}
+      {% set st = compliance_audit_stat_by_path.get(item.path, {}) -%}
+      {% set _ = out.append({
+           'id': 'file.' ~ item.path, 'category': 'Filesystem',
+           'title': item.path ~ ' is ' ~ item.mode ~ ' ' ~ item.owner | default('root') ~ ':' ~ item.group | default('root'),
+           'applicable': st.exists | default(false),
+           'passed': st.mode | default('') == item.mode and st.pw_name | default('') == item.owner | default('root')
+                     and st.gr_name | default('') == item.group | default('root')}) -%}
+      {% endfor -%}
+      {% for module in kernel_blacklist_modules | difference(kernel_blacklist_exclude) | sort -%}
+      {% set _ = out.append({
+           'id': 'module.' ~ module, 'category': 'Kernel', 'title': 'Kernel module ' ~ module ~ ' is blacklisted',
+           'passed': ('install ' ~ module ~ ' /bin/false') in compliance_audit_file.get('/etc/modprobe.d/hardening-blacklist.conf', '')}) -%}
+      {% endfor -%}
+      {% for pkg in legacy_packages -%}
+      {% set _ = out.append({
+           'id': 'package.' ~ pkg, 'category': 'Services', 'title': 'Legacy package ' ~ pkg ~ ' is not installed',
+           'passed': pkg not in ansible_facts.packages}) -%}
+      {% endfor -%}
+      {% set active_units = compliance_audit_units.stdout_lines | map('split') | map('first') | list -%}
+      {% for unit in services_disable_units if unit.endswith('.service') -%}
+      {% set _ = out.append({
+           'id': 'service.' ~ unit, 'category': 'Services', 'title': 'Unused service ' ~ unit ~ ' is not running',
+           'passed': unit not in active_units}) -%}
+      {% endfor -%}
+      {% set docker_raw = compliance_audit_file.get('/etc/docker/daemon.json', '') | trim -%}
+      {% set docker_cfg = docker_raw | from_json if docker_raw | length > 0 else {} -%}
+      {% for key, value in (docker_daemon_settings | combine(docker_daemon_overrides)).items() | sort -%}
+      {% set _ = out.append({
+           'id': 'docker.' ~ key, 'category': 'Docker', 'title': 'Docker daemon ' ~ key ~ ' = ' ~ value,
+           'applicable': compliance_audit_workloads.results[0].stat.exists,
+           'passed': docker_cfg.get(key) == value}) -%}
+      {% endfor -%}
+      {{ out }}
+
+- name: Evaluate every check
+  ansible.builtin.set_fact:
+    compliance_audit_results: >-
+      {% set out = [] -%}
+      {% for c in compliance_audit_checks + compliance_audit_dynamic -%}
+      {% set _ = out.append({
+           'id': c.id, 'category': c.category, 'title': c.title,
+           'status': ('PASS' if c.passed | bool else 'FAIL') if c.applicable | default(true) | bool else 'SKIP'}) -%}
+      {% endfor -%}
+      {{ out }}
+
+- name: Summarise the result for this host
+  ansible.builtin.set_fact:
+    compliance_audit_summary:
+      host: "{{ inventory_hostname }}"
+      address: "{{ ansible_host | default(inventory_hostname) }}"
+      passed: "{{ compliance_audit_results | selectattr('status', 'equalto', 'PASS') | list | length }}"
+      failed: "{{ compliance_audit_results | selectattr('status', 'equalto', 'FAIL') | list | length }}"
+      skipped: "{{ compliance_audit_results | selectattr('status', 'equalto', 'SKIP') | list | length }}"
+      checks: "{{ compliance_audit_results }}"
+
+- name: Score this host
+  ansible.builtin.set_fact:
+    compliance_audit_summary: >-
+      {{ compliance_audit_summary | combine({'score':
+         ((compliance_audit_summary.passed | int) * 100 / ((compliance_audit_summary.passed | int) + (compliance_audit_summary.failed | int))) | round(1)
+         if ((compliance_audit_summary.passed | int) + (compliance_audit_summary.failed | int)) > 0 else 100.0}) }}
+
+- name: Show the score and failed checks
+  ansible.builtin.debug:
+    msg: >-
+      {{ inventory_hostname }}: {{ compliance_audit_summary.score }}% ({{ compliance_audit_summary.passed }} passed,
+      {{ compliance_audit_summary.failed }} failed, {{ compliance_audit_summary.skipped }} not applicable)
+      {% for c in compliance_audit_summary.checks | selectattr('status', 'equalto', 'FAIL') %}
+      | FAIL [{{ c.category }}] {{ c.title }}
+      {% endfor %}
+
+# --- One combined report for the whole run -------------------------------------------------------------------
+- name: Write the combined report
+  delegate_to: localhost
+  become: false
+  run_once: true
+  block:
+    - name: Ensure the reports directory exists
+      ansible.builtin.file:
+        path: "{{ audit_report_dir }}"
+        state: directory
+        mode: "0755"
+
+    - name: Timestamp the report
+      ansible.builtin.set_fact:
+        compliance_audit_stamp: "{{ now(utc=true, fmt='%Y%m%dT%H%M%SZ') }}"
+
+    - name: Write the JSON report
+      ansible.builtin.template:
+        src: report.json.j2
+        dest: "{{ audit_report_dir }}/audit-{{ compliance_audit_stamp }}.json"
+        mode: "0644"
+      when: audit_generate_json | bool
+
+    - name: Write the HTML report
+      ansible.builtin.template:
+        src: report.html.j2
+        dest: "{{ audit_report_dir }}/audit-{{ compliance_audit_stamp }}.html"
+        mode: "0644"
+      when: audit_generate_html | bool
+
+    - name: Say where the report is
+      ansible.builtin.debug:
+        msg: "Audit report written to {{ audit_report_dir }}/audit-{{ compliance_audit_stamp }}.(html|json)"
+
+- name: Enforce the minimum score
+  ansible.builtin.assert:
+    that: compliance_audit_summary.score | float >= audit_min_score | float
+    fail_msg: "{{ inventory_hostname }} scored {{ compliance_audit_summary.score }}%, below audit_min_score={{ audit_min_score }}."
+    quiet: true
+  when: audit_min_score | float > 0
