@@ -1,0 +1,25 @@
+---
+# Installs the public keys from ssh_authorized_keys for the connection user. It runs right after preflight, so key
+# login already works if a later step fails, and so ssh_hardening's lockout guard finds the key once password login
+# is switched off. Keys already on the host are kept; this role only adds.
+
+- name: Refuse entries that are not SSH public keys
+  ansible.builtin.assert:
+    that:
+      - ssh_authorized_keys is sequence
+      - ssh_authorized_keys is not string
+      - >-
+        ssh_authorized_keys
+        | reject('match', '(ssh-ed25519|ssh-rsa|ecdsa-sha2-nistp(256|384|521)|sk-ssh-ed25519@openssh\.com|sk-ecdsa-sha2-nistp256@openssh\.com) AAAA')
+        | list | length == 0
+    fail_msg: >-
+      ssh_authorized_keys must be a list of public keys, one "ssh-ed25519 AAAA... comment" line each
+      (the content of a .pub file). Never put a private key there.
+    quiet: true
+
+- name: Install the authorized SSH keys for the connection user
+  ansible.posix.authorized_key:
+    user: "{{ ansible_user }}"
+    key: "{{ ssh_authorized_keys | join('\n') }}"
+    state: present
+  when: ssh_authorized_keys | length > 0

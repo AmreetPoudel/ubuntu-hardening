@@ -26,6 +26,7 @@ compliance_audit_files:
   - /etc/modprobe.d/hardening-blacklist.conf
   - /etc/cron.allow
   - /etc/docker/daemon.json
+  - "~{{ ansible_user }}/.ssh/authorized_keys"
 
 compliance_audit_checks:
   # --- SSH (effective configuration from `sshd -T`) ---
@@ -69,6 +70,13 @@ compliance_audit_checks:
     category: SSH
     title: No CBC, 3DES or RC4 ciphers are offered
     passed: "{{ compliance_audit_ssh.get('ciphers', '') is not search('cbc|3des|arcfour') and compliance_audit_ssh.get('ciphers', '') | length > 0 }}"
+  - id: ssh.authorized_keys
+    category: SSH
+    title: Keys from ssh_authorized_keys are installed for the connection user
+    applicable: "{{ ssh_authorized_keys | length > 0 }}"
+    passed: >-
+      {{ ssh_authorized_keys | map('regex_search', '^\S+\s+\S+') | map('regex_replace', '\s+', ' ')
+         | reject('in', compliance_audit_file.get('~' ~ ansible_user ~ '/.ssh/authorized_keys', '')) | list | length == 0 }}
   - id: ssh.banner
     category: SSH
     title: Login banner is shown before authentication

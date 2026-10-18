@@ -20,7 +20,7 @@
     fail_msg: >-
       Refusing to set PasswordAuthentication no on {{ inventory_hostname }}: Ansible would lock itself out.
       To turn password login off, either (a) switch the inventory to key authentication (remove ansible_ssh_pass /
-      ansible_password) AND install a key in ~{{ ansible_user }}/.ssh/authorized_keys, or (b) list the network Ansible
+      ansible_password) AND put your public key in ssh_authorized_keys (run once so it is installed), or (b) list the network Ansible
       connects from in ssh_password_auth_allowed_from / hardening_mgmt_cidrs so password login stays possible from there.
     quiet: true
 

@@ -13,6 +13,8 @@
 
   roles:
     - { role: preflight, tags: [always] }
+    # Your SSH key first: key login keeps working even if a later step fails
+    - { role: ssh_authorized_keys, tags: [ssh_authorized_keys, auth, ssh] }
 
     # Packages and updates
     - { role: pkg_remove_legacy, tags: [pkg_remove_legacy, packages] }
